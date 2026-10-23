@@ -22,6 +22,7 @@ source "$SETUP_DIR/fssimu2.sh"
 source "$SETUP_DIR/wwxd.sh"
 source "$SETUP_DIR/vszip.sh"
 source "$SETUP_DIR/subtext.sh"
+source "$SETUP_DIR/cachyos_deps.sh"
 
 # Dependency Graph Definition
 # Format: declare -A DEPS
@@ -43,7 +44,11 @@ is_installed() {
     local tool=$1
     case "$tool" in
         "system_deps") 
-            dpkg -s build-essential &> /dev/null
+            if command -v pacman &> /dev/null; then
+                pacman -Qi clang &> /dev/null
+            else
+                dpkg -s build-essential &> /dev/null
+            fi
             ;;
         "python_libs")
             pip3 show vsjetpack &> /dev/null
@@ -149,7 +154,13 @@ install_tool() {
         log_info "Installing: $item"
         local status=0
         case "$item" in
-            "system_deps") install_system_deps ;;
+            "system_deps")
+                if command -v pacman &> /dev/null; then
+                    install_cachyos_deps
+                else
+                    install_system_deps
+                fi
+                ;;
             "python_libs") install_python_libs ;;
             "vapoursynth") install_vapoursynth ;;
             "av1an") install_av1an ;;
@@ -181,7 +192,13 @@ uninstall_tool() {
     fi
     
     case "$target_tool" in
-        "system_deps") uninstall_system_deps ;;
+        "system_deps")
+            if command -v pacman &> /dev/null; then
+                uninstall_cachyos_deps
+            else
+                uninstall_system_deps
+            fi
+            ;;
         "python_libs") uninstall_python_libs ;;
         "vapoursynth") uninstall_vapoursynth ;;
         "av1an") uninstall_av1an ;;

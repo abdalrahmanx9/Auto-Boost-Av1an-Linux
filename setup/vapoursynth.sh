@@ -11,6 +11,18 @@ install_vapoursynth() {
         return 0
     fi
 
+    # On Arch/CachyOS, VapourSynth + FFMS2 + BestSource all exist as official
+    # packages (extra repo) — install via pacman instead of building from source.
+    if command -v pacman &> /dev/null; then
+        log_info "Installing VapourSynth, FFMS2 and BestSource via pacman..."
+        pacman -S --needed --noconfirm vapoursynth ffms2 vapoursynth-plugin-bestsource || {
+            log_error "Failed to install VapourSynth packages via pacman."
+            return 1
+        }
+        log_success "VapourSynth, FFMS2, and BestSource installed from official repositories."
+        return 0
+    fi
+
     log_info "Compiling VapourSynth from Source..."
     
     mkdir -p build_tmp

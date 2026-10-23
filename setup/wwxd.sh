@@ -22,13 +22,19 @@ install_wwxd() {
     git clone --branch v1.0 --depth 1 https://github.com/dubhater/vapoursynth-wwxd.git || { log_error "Failed to clone WWXD"; cd ..; return 1; }
     cd vapoursynth-wwxd || { log_error "Failed to cd into vapoursynth-wwxd"; cd ..; cd ..; return 1; }
     
-    # Check for VapourSynth headers
-    if [ ! -d "/usr/local/include/vapoursynth" ]; then
+    # Check for VapourSynth headers (source installs put them in /usr/local,
+    # distro packages such as Arch/CachyOS put them in /usr)
+    local VS_INCLUDE=""
+    if [ -d "/usr/local/include/vapoursynth" ]; then
+        VS_INCLUDE="/usr/local/include/vapoursynth"
+    elif [ -d "/usr/include/vapoursynth" ]; then
+        VS_INCLUDE="/usr/include/vapoursynth"
+    else
         log_error "VapourSynth headers not found. Please install VapourSynth first."
         exit 1
     fi
     
-    gcc -o libwwxd.so -fPIC -shared -O3 -Wall -Wextra -I. -I/usr/local/include/vapoursynth src/*.c -lm || \
+    gcc -o libwwxd.so -fPIC -shared -O3 -Wall -Wextra -I. -I"$VS_INCLUDE" src/*.c -lm || \
         { log_error "Compilation failed"; cd ..; cd ..; return 1; }
     
     cp libwwxd.so "$VS_PLUGIN_PATH/" || { log_error "Failed to copy libwwxd.so"; cd ..; cd ..; return 1; }

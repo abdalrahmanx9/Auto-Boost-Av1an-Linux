@@ -22,7 +22,14 @@ install_av1an() {
         export PATH="$HOME/.cargo/bin:$PATH"
     fi
 
-    # 2. Av1an
+    # 2. Av1an — on Arch/CachyOS the official repo package is much faster than a cargo build
+    if ! command -v av1an &> /dev/null; then
+        if command -v pacman &> /dev/null; then
+            log_info "Installing Av1an via pacman..."
+            pacman -S --needed --noconfirm av1an || log_warn "pacman av1an install failed, falling back to cargo..."
+        fi
+    fi
+
     if ! command -v av1an &> /dev/null; then
         log_info "Installing Av1an via Cargo (Git Source)..."
         source "$HOME/.cargo/env"
