@@ -8,7 +8,7 @@
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 TOOLS_DIR="$ROOT_DIR/tools"
-EAC3_SCRIPT="$TOOLS_DIR/eac3.py"
+EAC3_SCRIPT="$TOOLS_DIR/audio-eac3.py"
 
 echo "============================================================"
 echo "      Audio Encoder (EAC3) - Linux"
@@ -24,7 +24,7 @@ echo "using FFMPEG and muxes them into new files in 'eac3-output'."
 echo ""
 
 if [ ! -f "$EAC3_SCRIPT" ]; then
-    echo "[ERROR] Could not find eac3.py at: $EAC3_SCRIPT"
+    echo "[ERROR] Could not find audio-eac3.py at: $EAC3_SCRIPT"
     exit 1
 fi
 

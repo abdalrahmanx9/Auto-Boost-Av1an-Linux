@@ -8,7 +8,7 @@
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 TOOLS_DIR="$ROOT_DIR/tools"
-OPUS_SCRIPT="$TOOLS_DIR/opus.py"
+OPUS_SCRIPT="$TOOLS_DIR/audio-opus.py"
 
 echo "============================================================"
 echo "      Audio Encoder (Opus) - Linux"
@@ -24,7 +24,7 @@ echo "into new files inside the 'opus-output' folder."
 echo ""
 
 if [ ! -f "$OPUS_SCRIPT" ]; then
-    echo "[ERROR] Could not find opus.py at: $OPUS_SCRIPT"
+    echo "[ERROR] Could not find audio-opus.py at: $OPUS_SCRIPT"
     exit 1
 fi
 
