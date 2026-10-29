@@ -1,307 +1,185 @@
-# Auto-Boost-Av1an for Ubuntu
+# Auto-Boost-Av1an for Linux
 
-This guide explains how to set up and run Auto-Boost-Av1an on Ubuntu.
+Portable AV1 encoding suite for Ubuntu/Debian, kept at feature parity with the
+Windows package. Powered by Av1an + SVT-AV1-PSY forks, VapourSynth R79 and
+GPU metrics (Vship / FFVship).
+
+---
+
+## Quick Start
+
+```bash
+sudo ./setup.sh            # install everything (modular; menu-driven)
+./autoboost-anime-crf30.sh # drop files into video-input/ and run a premade script
+```
+
+Or build your own script with the guided questionnaire:
+
+```bash
+./script-builder.sh
+```
 
 ---
 
 ## Which Script Should I Choose?
 
-Pick based on your content type and desired quality:
+### Premade scripts (repo root)
 
-### 🎌 ANIME
-| Script | Quality | Description |
-|--------|---------|-------------|
-| `run_linux_anime_crf30.sh` | **Standard** | ✅ Recommended starting point |
-| `run_linux_anime_crf25.sh` | High | Higher quality, larger files |
-| `run_linux_anime_crf18.sh` | Archival | Maximum quality, largest files |
+| Script | Mode | Fork | Notes |
+|--------|------|------|-------|
+| `autoboost-anime-crf30.sh` | Auto-Boost two-pass | 5fish | Denoise on, photon-noise 200 |
+| `autoboost-liveaction-crf30.sh` | Auto-Boost two-pass | essential | Auto crop, photon-noise 400 |
+| `av1an-anime-crf30.sh` | Single pass | 5fish | Straight-through encode |
+| `av1an-liveaction-crf30.sh` | Single pass | essential | Auto crop, photon-noise 400 |
+| `av1an-batch-anime-crf30.sh` | Single pass | 5fish | Batch variant |
+| `av1an-batch-liveaction-crf30.sh` | Single pass | essential | Batch variant |
 
-### 🎬 LIVE ACTION / MOVIES / TV SHOWS
-| Script | Quality | Description |
-|--------|---------|-------------|
-| `run_linux_live_crf30.sh` | **Standard** | ✅ Recommended starting point |
-| `run_linux_live_crf25.sh` | High | Higher quality, larger files |
-| `run_linux_live_crf18.sh` | Archival | Maximum quality, largest files |
+**Auto-Boost** measures quality on a fast first pass and boosts weak scenes on
+the final pass. **Single pass** just encodes once - preferred for grainy
+content (metrics mistake grain for detail).
 
-### ⚽ SPORTS / FAST MOTION
-| Script | Quality | Description |
-|--------|---------|-------------|
-| `run_linux_sports_crf33.sh` | Optimized | ✅ Best for high-motion content |
+**Tip:** Start at CRF 30. Want better? CRF 25. Archival? CRF 18. Any CRF is a
+`script-builder.sh` question away - it generates a script for any fork/CRF/
+preset/autocrop/benchmark combination, exactly like the Windows builder.
 
-### 🎞️ DIRECT ENCODE (SINGLE PASS, NO BOOST)
-| Script | Quality | Description |
-|--------|---------|-------------|
-| `av1an-batch-anime-crf30.sh` | Standard | Single-pass anime encode, no Auto-Boost |
-| `av1an-batch-liveaction-crf30.sh` | Standard | Single-pass live action encode, no Auto-Boost |
+### Target-quality encoders (user-supplied binaries)
 
-### 🚀 PROGRESSION BOOST (PER-SCENE OPTIMIZATION)
-| Script | Quality | Description |
-|--------|---------|-------------|
-| `Progression-Boost-SSIMU2-anime.sh` | **Auto** | Analyzes each scene and optimizes settings for Anime |
-| `Progression-Boost-SSIMU2-liveaction.sh` | **Auto** | Analyzes each scene and optimizes settings for Live Action |
-> **Note:** Progression Boost uses SSIMULACRA2 metrics to target a visual quality score (Default: 82), adjusting bitrate (crf) on a per scene basis to target that quality score. It benchmarks your CPU/RAM on first run to set optimal workers.
+| Workflow | What it does |
+|----------|--------------|
+| `condor-builder.sh` | Builds scripts for **Condor**, a target-quality encoder: pick a metric score (SSIMULACRA2 / CVVDP / Butteraugli), it probes each scene until it hits it. Place your Linux `condor` binary in `tools/av1an/`. |
+| `lqtc-builder.sh` | Builds scripts for **LQTC** (Large Quality Target Collider). Place `lqtc-<backend>-<fork>-<arch>` binaries and `display.json` in `tools/LQTC/`. |
 
-> **TIP:** Start with CRF 30. If quality isn't sufficient, try CRF 25. For archival purposes, use CRF 18.
+Activate both from `script-builder.sh` -> `3: Setup advanced tools`.
 
-### What is CRF?
-CRF stands for "Constant Rate Factor." It determines the balance between Video Quality and File Size:
-- **Lower CRF** (e.g., 18) = Higher Quality, Larger File Size
-- **Higher CRF** (e.g., 30) = Lower Quality, Smaller File Size
+### AfterZone
+
+`tools/AfterZone.sh` re-encodes only the scenes you choose from an already
+finished encode (av1an, LQTC and Condor working folders are all detected).
+Zones go in `video-input/<name>.txt` - see `zones-example.txt`. It can
+auto-generate a zones file from the finished file's bitrate and add CRF /
+tf-strength boosts per zone.
 
 ---
 
-## Prerequisites
+## Folder Layout
 
-### Automatic Installation
+| Folder | Purpose |
+|--------|---------|
+| `video-input/` | Drop your sources here |
+| `video-output/` | Finished `<name>-output.mkv` files |
+| `temp/` | Working folders (kept for AfterZone; cleaned by cleanup.py) |
+| `tools/` | All Python tools, benchmarks, fork binaries |
+| `tools/av1an/svt-av1 forks/` | `<5fish|essential|hdr|custom>/<arch>/SvtAv1EncApp` |
+| `tools/vs-hip`, `tools/FFVship` | Vship metric builds (NVIDIA/AMD/Vulkan) |
+| `tools/LQTC` | LQTC binaries + display.json |
 
-For a detailed list of versions and software installed, see [DEPENDENCIES.md](DEPENDENCIES.md).
+---
 
+## Forks (SVT-AV1 encoder presets)
 
-We have provided a **modular** setup script to install or uninstall dependencies individually or in bulk.
-This script needs to be run as root.
+- **5fish** - anime: line/texture psy, best detail retention
+- **essential** - anime or live action: scalable fidelity (`--distortion-bias-preset 0-4`)
+- **hdr** - HDR or grainy live action (`--tune 0 --noise 4` clean / `--tune 5 --film-grain 10` film)
+- **custom** - your own `SvtAv1EncApp` in `tools/av1an/svt-av1 forks/custom/x86-64-v3/`
 
-```bash
-chmod +x setup.sh
-sudo ./setup.sh
-```
+`ARCH` picks the CPU build: `x86-64-v3` (any modern CPU), `znver2`
+(Ryzen 3000+), `avx512` (AVX-512 CPUs only; auto-downgraded if unsupported).
 
-The script will launch an interactive menu where you can:
--   **Install All**: Setup everything in one go (Recommended).
--   **Selective Install**: Install specific tools (e.g., Av1an, SVT-AV1) by entering their numbers (e.g., `1 3 5`).
--   **Uninstall**: Switch to Uninstall mode (Press **T**) to remove specific tools or everything.
+---
 
-**CLI Mode:**
-You can also run it without the menu:
-```bash
-sudo ./setup.sh --install A      # Install Everything
-sudo ./setup.sh --install av1an  # Install Av1an only
-sudo ./setup.sh --uninstall A    # Uninstall Everything
-```
+## settings.txt
 
-If you prefer to install manually, follow the steps below.
+The whole filter chain lives in `settings.txt` (see its `# info` section for
+every knob):
 
-### 1. System Packages
+- `[crop]` auto (batch `--autocrop`) / manual (all four edges) / off
+- `[downscaling]` target resolution + kernel (hermite anime, spline36 live action)
+- `[dehalo]` edge_cleaner (AWarp) and `[fine_dehalo]` mask pipeline - pick one
+- `[denoise]` raw VapourSynth line (DFTTest example included)
+- `[deband]` libplacebo
+- `ntfy=` path to phone-notification config (`extras/ntfy-setup.sh` writes it)
+- `tonemap_backend=auto|gpu|cpu` for HDR->SDR
 
-Install basic tools, FFmpeg, and x264 (required for scene detection):
+Preview any change with `settings-preview.sh` before committing to an encode.
 
-```bash
-sudo apt update
-sudo apt install -y ffmpeg x264 mkvtoolnix mkvtoolnix-gui python3 python3-pip git curl
-```
+**template.vpy mode:** script-builder's advanced tools can save your filter
+chain as an editable `video-input/template.vpy` (with commented DirectML /
+TensorRT / AMD ArtCNN rescale sections). While it exists it owns cropping and
+the settings.txt filters are bypassed.
 
-### 2. VapourSynth
+---
 
-Install VapourSynth and its Python bindings.
-For Ubuntu, you might need to add the `vs-repo` or use the default repositories if available (Ubuntu 24.04+ has newer versions).
+## Benchmarks
 
-```bash
-sudo apt install -y vapoursynth libvapoursynth-dev python3-vapoursynth
-```
+First run of any premade script measures:
 
-### 3. Python Dependencies
+- optimal **encode worker count** (real throughput through your filters)
+- the fastest **SSIMU2 metric backend** your GPU can run
+  (vs-hip CUDA/HIP/Vulkan, FFVship, vs-zip CPU)
 
-Install the required Python packages:
+Results go to `tools/workercount-config.txt` and `tools/workercount-ssimu2.txt`.
+Delete either to re-benchmark, or edit by hand. Scripts built with the
+"optimized workers" question re-benchmark with their own preset and write the
+tuned values back into themselves.
 
-```bash
-pip3 install vsjetpack numpy rich vstools psutil
-```
+---
 
-### 4. Av1an
+## HDR
 
-The automatic installer uses the latest version from Git for feature parity.
-Manual install:
-```bash
-cargo install --git https://github.com/rust-av/Av1an.git
-```
+- **HDR stays HDR** with the hdr fork: color metadata is signaled
+  automatically from MediaInfo.
+- **Tonemap to SDR** (`tonemap="True"` or the builder question): libplacebo
+  inside the VapourSynth script; Intel GPUs fall back to a CPU BT.2390 path.
 
-### 5. fssimu2 (CPU Metrics)
-The automated installer compiles this native Rust tool for identical Windows parity.
-Manual install:
-```bash
-cargo install --git https://github.com/gianni-rosato/fssimu2.git
-```
+---
 
-### 5b. vship / FFVship (GPU Metrics)
-The automated installer compiles this from source for GPU-accelerated metrics.
-Requires NVIDIA (CUDA) or AMD (HIP) drivers.
-Manual install: *See [Line-fr/Vship](https://github.com/Line-fr/Vship)*
+## Extras (`extras/`)
 
+| Script | Purpose |
+|--------|---------|
+| `compare.sh` | slow.pics comparison between two files |
+| `create-sample.sh` | 90 s sample (custom mm:ss range) |
+| `create-discord-10mb-sample.sh` | 9.98 MB uploadable sample |
+| `simple-remux.sh` | remux mkv/mp4/m2ts into clean mkv |
+| `add-subtitles.sh` | mux subs + fonts, language autodetect |
+| `lossless-intermediary.sh` | x265 lossless intermediary for problem sources |
+| `photon-film-grain-test.sh` | photon-noise / film-grain strength sweeps |
+| `ntfy-setup.sh` | phone notifications when encodes finish |
+| `clean-temp-files.sh` | comparison leftovers |
+| `mkvpropedit-gui.sh` | mkvtoolnix-gui wrapper (JMkvpropedit stand-in) |
+| `disk-usage.sh` | tools folder size report |
+| `encode-opus-audio.sh`, `encode-ac3-audio.sh`, `encode-eac3-audio.sh` | audio-encoding/ batch encoders |
 
-### 5. SVT-AV1
+---
 
-The automatic installer compiles **SVT-AV1-PSY** (Psycho-visual fork) with Clang and PGO/LTO optimizations for best quality and speed on Linux.
-Manual install (Recommended Build Command):
-```bash
-git clone https://github.com/5fish/svt-av1-psy
-cd svt-av1-psy
-mkdir -p Build/linux && cd Build/linux
-cmake ../.. -G"Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DENABLE_AVX512=ON -DNATIVE=ON -DSVT_AV1_PGO=ON -DSVT_AV1_LTO=ON
-make -j $(nproc)
-sudo make install
-```
-Ensure `SvtAv1EncApp` is in your PATH.
-
-### 6. VapourSynth Plugins
-
-The script relies on the following plugins:
-1.  **FFMS2**: For video loading.
-2.  **WWXD**: For scene detection (required by `Progressive-Scene-Detection.py`).
-3.  **VSZIP**: For metrics calculation (fallback if `fssimu2` is missing).
-
-**Install FFMS2:**
-```bash
-sudo apt install -y libffms2-4 libffms2-dev
-# OR compile from source (recommended for latest ffmpeg support)
-```
-
-**Install WWXD (Critical Fix):**
-You MUST link against the math library.
-```bash
-git clone https://github.com/dubhater/vapoursynth-wwxd.git
-cd vapoursynth-wwxd
-gcc -o libwwxd.so -fPIC -shared -O3 -Wall -Wextra -I. -I/usr/local/include/vapoursynth src/*.c -lm
-sudo cp libwwxd.so /usr/local/lib/vapoursynth/
-```
-
-**Install VSZIP (Metrics):**
-We recommend using the automated build script provided in the repository.
-```bash
-git clone https://github.com/dnjulek/vapoursynth-zip.git vszip
-cd vszip/build-help
-chmod +x build.sh
-./build.sh
-# Ensure the plugin is in your VapourSynth path (e.g., /usr/local/lib/vapoursynth)
-sudo cp ../zig-out/lib/libvszip.so /usr/local/lib/vapoursynth/
-```
-
-*Alternatively, you can install the `fssimu2` binary and place it in your PATH to avoid needing `vszip`.*
-
-
-## Verification
-
-To verify that the installation was successful, run the following commands:
+## Installation
 
 ```bash
-# Check Core Tools
-ffmpeg -version | head -n 1
-mkvmerge --version
-python3 --version
-mediainfo --version
-
-# Check VapourSynth
-vspipe --version
-python3 -c "import vapoursynth; print(f'VapourSynth Core: {vapoursynth.core.version()}')"
-
-# Check Encoders
-av1an --version
-SvtAv1EncApp --help | grep "SVT"
-
-# Check Metrics Tools
-zig version
-fssimu2 --version || echo "fssimu2 not installed (optional - will use vs-zip fallback)"
-FFVship --help | head -n 1 || echo "FFVship (GPU) not installed"
-
-# Check VapourSynth Plugins
-python3 -c "from vapoursynth import core; print('WWXD:', hasattr(core, 'wwxd')); print('VSZIP:', hasattr(core, 'vszip'))"
-```
-## Usage
-
-### 3. Usage
-
-1.  Place your source files (e.g., `.mkv` or `.mp4`) into the `Input/` folder.
-    *   *Note: The script will create this folder automatically if it doesn't exist.*
-    *   *Note: Files do NOT need to be renamed to `*-source.mkv` anymore.*
-2.  Make the scripts executable (if not already):
-    ```bash
-    chmod +x run_linux_anime_*.sh
-    chmod +x run_linux_live_*.sh
-    ```
-3.  Run the script variant of your choice.
-    *   Your final encoded files will appear in the `Output/` folder.
-We provide variants based on content type (Anime vs Live Action) and quality. All scripts support **Auto-BT.709 Detection**.
-
-**Anime Variants:**
-*   **Standard (CRF 30)**: `./run_linux_anime_crf30.sh` - Balanced speed/quality (Tune 3).
-*   **High (CRF 25)**: `./run_linux_anime_crf25.sh` - Slower, Tune 0.
-*   **Highest (CRF 18)**: `./run_linux_anime_crf18.sh` - Aggressive boosting.
-
-**Live Action Variants (Auto-Crop Enabled):**
-*   **Standard (CRF 30)**: `./run_linux_live_crf30.sh` - Auto-crop, Tune 3.
-*   **High (CRF 25)**: `./run_linux_live_crf25.sh` - Tune 3, Variance Boost 2.
-*   **Highest (CRF 18)**: `./run_linux_live_crf18.sh` - Maximum fidelity.
-
-**Sports / High-Motion Content:**
-*   **Low Quality (CRF 33)**: `./run_linux_sports_crf33.sh` - Optimized for high-motion content with extra temporal filtering.
-
-The script will:
-1.  Detect Scene Changes.
-2.  Start Av1an with the optimized parameters.
-3.  Automatically calculate worker count based on your hardware (on first run).
-4.  Run Auto-Boost-Av1an (Fast Pass -> Metrics -> Zones -> Final Encode).
-5.  Mux audio/subtitles back.
-6.  Tag the output file.
-7.  Cleanup temporary files.
-8.  Final outputs are in the `Output/` folder.
-
-## Audio Encoding (Standalone)
-
-We include an `audio-encoding/` folder for batch audio conversion workflows:
-
-| Script | Description |
-|--------|-------------|
-| `encode-ac3-audio.sh` | Converts audio tracks to **AC3** (Dolby Digital) - for legacy devices |
-| `encode-eac3-audio.sh` | Converts audio tracks to **EAC3** (Dolby Digital Plus) - recommended |
-| `encode-eac3-audio.sh` | Converts audio tracks to **EAC3** (Dolby Digital Plus) - recommended |
-| `encode-opus-audio.sh` | Converts audio tracks to **Opus** - best quality/size ratio |
-
-> **2.1 Channel Support:** `encode-opus-audio.sh` (192k) and `encode-ac3-audio.sh` (320k) now support 2.1 channel detection and optimization.
-
-
-*Usage:*
-```bash
-cd audio-encoding
-# Place your .mkv files in this folder
-./encode-eac3-audio.sh
+sudo ./setup.sh                # interactive menu
+sudo ./setup.sh --install A    # everything
+sudo ./setup.sh --install 3    # just SVT-AV1 forks
 ```
 
-Settings files (`settings-encode-*.txt`) control bitrates per channel configuration.
+Modules: system deps, python libs, VapourSynth R79 (+FFMS2/BestSource),
+Av1an, SVT-AV1 forks, Vship 5.1.0 + FFVship, oxipng, WWXD, VSZIP 19,
+SubText, filter plugins (akarin/AWarp/DFTTest/zsmooth/vs-placebo), vs-mlrt,
+Condor/LQTC layout. See [DEPENDENCIES.md](DEPENDENCIES.md).
 
-## Extras (Linux)
+Manual setup and build flags are documented in DEPENDENCIES.md.
 
-We include an `extras/` folder with helper scripts for advanced workflows:
-
-| Script | Description |
-|--------|-------------|
-| `encode-opus-audio.sh` | Legacy audio encoding (use `audio-encoding/` instead) |
-| `lossless-intermediary.sh` | Converts video to lossless 10-bit x265 intermediates |
-| `compare.sh` | Generates comparison screenshots via `comp.py` |
-| `light-denoise.sh` | Applies DFTTest denoise + x265 lossless encoding |
-| `light-denoise-nvidia.sh` | GPU-accelerated NVEncC denoise (NVIDIA required) |
-| `forced-aspect-remux.sh` | Copies aspect ratio from source to encoded output |
-| `disk-usage.sh` | Reports disk usage (Linux replacement for NTFS compress) |
-
-*Usage:*
-```bash
-cd extras
-./light-denoise.sh
-```
-
-## Prefilter (Deband Scripts)
-
-The `prefilter/` folder contains scripts for applying deband filters before encoding:
-
-| Script | Description |
-|--------|-------------|
-| `nvidia-deband.sh` | NVIDIA GPU deband using NVEncC + libplacebo |
-| `x265-lossless-deband.sh` | CPU deband using VapourSynth + x265 lossless |
-
-Edit `prefilter/settings.txt` to customize filter settings.
-
-*Requirements:*
-- For NVIDIA scripts: NVEncC installed and in PATH
-- For x265 scripts: VapourSynth with placebo plugin, x265
+---
 
 ## Troubleshooting
 
--   **Missing Tools**: Ensure `av1an`, `SvtAv1EncApp`, `ffmpeg`, `mkvmerge`, `mkvpropedit` are in your PATH.
--   **VapourSynth Errors**: Ensure you have the required plugins (`ffms2`) installed and accessible to VapourSynth.
--   **Permissions**: Ensure you have write permissions in the folder.
+- **`av1an: command not found`** - rerun `sudo ./setup.sh --install 1`.
+- **A fork reports missing** - rebuild with `--install 3`, or drop the binary
+  into `tools/av1an/svt-av1 forks/<name>/x86-64-v3/`.
+- **SSIMU2 benchmark finds nothing** - no GPU vship build matched your card;
+  vs-zip CPU is the automatic fallback.
+- **dehalo/fine_dehalo error about a plugin** - `sudo ./setup.sh --install 9`
+  (filter plugins).
+- **AVX-512 build crashes at startup** - your CPU lacks AVX-512; keep
+  `ARCH=x86-64-v3`.
+
+For anything else, the Windows package's Discord/support channels apply
+equally to this port.

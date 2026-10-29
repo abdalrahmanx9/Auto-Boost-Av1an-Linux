@@ -3,11 +3,24 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Temporary/Output Folders
-Input/
-Output/
+# Temporary/video-output Folders
+video-input/
+video-output/
 .temp/
+temp/
 *.log
+
+# Runtime state (benchmarks, markers, caches)
+tools/bat-used-*.txt
+tools/workercount-config.txt
+tools/workercount-ssimu2.txt
+tools/workercount-progression.txt
+tools/ntfy.txt
+tools/benchmark-sample.mkv
+tools/workercount_bench_temp/
+tools/ssimu2_bench_temp/
+.vsjet/
+build_tmp/
 
 # Editor
 .vscode/

@@ -2,6 +2,57 @@
 
 All notable changes to the Linux Port of Auto-Boost-Av1an will be documented in this file.
 
+## [3.0.0-linux] - 2026-10-29
+
+Full catch-up with the Windows suite (feature parity with Windows v3.4.5; Linux version numbers are independent of Windows ones).
+
+### Removed
+- **Progression Boost** suite (removed upstream in Windows v1.64): all scripts, dispatchers, muxers, taggers and worker benchmarks for it.
+- **fssimu2** backend and installer module (replaced upstream by the FFVship / vs-hip / vs-zip metric ladder).
+- Legacy `run_linux_*` scripts, replaced by the premade + script-builder workflow below.
+
+### Changed
+- **Folder layout**: `Input/`/`Output/` renamed to `video-input/`/`video-output/` matching the Windows package.
+- **Main engine** moved to `tools/Auto-Boost-Av1an.py` (Windows layout).
+- **Installer**: VapourSynth R73 -> **R79**, vsjetpack pinned **2.2.2**, Vship **5.1.0** (builds CUDA/HIP/Vulkan libvship + FFVship variants into `tools/vs-hip` + `tools/FFVship`), VSZIP **R19**, SVT-AV1 installed as a fork scheme (`tools/av1an/svt-av1 forks/<5fish|essential|hdr|custom>/<arch>/`), new modules: filter plugins (akarin, AWarp, DFTTest, zsmooth, vs-placebo), vs-mlrt (AI rescale), Condor/LQTC layout.
+
+### Added - Encoding workflows
+- **Fork system** (`--fork 5fish|essential|hdr|custom`, `--arch x86-64-v3|znver2|avx512`): dynamic SVT-AV1 fork selection with AVX-512 detection via `/proc/cpuinfo`.
+- **HDR support**: svt-av1-hdr fork, automatic HDR color signaling (primaries/transfer/matrix/mastering display/content light via MediaInfo), and HDR->SDR **tonemapping** (libplacebo GPU path with CPU BT.2390 fallback; Intel-GPU black-frame workaround kept).
+- **Direct Av1an mode** (`tools/av1an-dispatch.py`): single-pass encodes with the full settings.txt filter chain, zones machinery (zone flags, `reset` keyword, zones.txt in-place repair with backups, sliver-merge, zoned scenes JSON).
+- **Condor target-quality encoding** (user-supplied `condor` Linux binary): metric targets (ssimulacra2/cvvdp/butteraugli), quantizer ranges, fast/standard/slow target profiles, scenes injected with `--skip-scd`, photon-noise ISO tables on condor itself.
+- **LQTC target-quality encoding** (user-supplied `lqtc-*` binaries): metric chosen by target (butteraugli <8, CVVDP 8-10 with display.json, SSIMULACRA2 >10), CRF-range search, metric workers/mode.
+- **AfterZone**: re-encode chosen frame ranges of finished encodes across av1an/LQTC/Condor working folders; auto zone generation from bitrate (rolling median + threshold) with a matplotlib chart; +CRF/--tf-strength boost automation; batch mode; resumable markers.
+- **Zones**: scene-based per-zone encoder settings, `zones-example.txt` format, `--zones` override.
+- **Lossless intermediary mode**: filter chain runs once into a lossless x264 mkv; encodes read that file (offered by rescale options).
+- **template.vpy mode**: write your settings.txt filters as an editable VapourSynth script; template owns cropping while present; three ready-made rescale sections (commented): DirectML, NVIDIA TensorRT (vs-mlrt), AMD; template-preview.sh renders it.
+- **AI rescaling**: vs-mlrt backends (TRT/ORT/MIGX) + ArtCNN models via vsscale into `<repo>/.vsjet`.
+- **ntfy phone notifications** on encode completion (`extras/ntfy-setup.sh`).
+- **Rich progress bars** (simple mode) for every phase, with beginner-friendly explanations; `--verbose` for full output.
+- **MKV tagging**: settings written into `Encoded_Library_Settings` (media info visible), system-specific flags filtered out, tag-edit.py interactive editor.
+
+### Added - Filters (settings.txt)
+- `[crop]` auto/manual/off with all four edges; `[downscaling]` (8 kernels); `[dehalo]` (vsdehalo edge_cleaner + AWarp); `[fine_dehalo]` (mask pipeline, akarin/vszip/zsmooth); `[denoise]` (raw VS line, DFTTest example); `[deband]` (placebo); dehalo/fine_dehalo mutual exclusion; filter-state rebuild markers so toggles take effect on re-run; `tonemap_backend` key.
+- `settings-preview.sh` previews the chain side by side before encoding.
+
+### Added - Benchmarks
+- **workercount.py**: real-throughput benchmark through the actual filter chain and preset; RAM kill-switch; fps settle detection; workers=1 fail-safe; `--optimize-script` writes tuned values into the running script (custom_av1an_workers etc.).
+- **ssimu2-workercount.py**: benchmarks every vship backend your GPU vendor can run (nvidia/amd/vulkan plans via lspci), FFVship CLI runs with stall watchdogs, vs-zip CPU fallback; key-based `workercount-ssimu2.txt` (tool=/filter-tool=/workercount=/variant=/streams=).
+- **Worker config auto-repair** (tolerant reads of hand-edited configs).
+
+### Added - Tools & extras
+- `script-builder.sh` (bat-builder port): generates encode scripts with the same questions/presets as Windows, advanced tools menu (Condor/LQTC/AfterZone setup, source filter override, template.vpy writer with rescale + lossless pages), optional Tk GUI (menu entry 0).
+- Filenames auto-folded to plain ASCII (transliteration) before any tool sees them.
+- Mid-encode file scanning: files dropped into video-input during a batch are picked up.
+- `extras/create-discord-10mb-sample.sh`, `extras/clean-temp-files.sh`, `extras/photon-film-grain-test.sh` (photon-noise / film-grain strength sweeps), `extras/mkvpropedit-gui.sh` (stand-in for the Windows JMkvpropedit/Inviska/Breeze GUIs).
+- Audio tools renamed to `audio-opus.py`/`audio-ac3.py`/`audio-eac3.py` with **zlib-subtitles=False** setting and source track-title carryover.
+- `tools/x264-filter.sh`: lossless x264 pre-filter for LQTC sources.
+- Progressive-Scene-Detection: BestSource auto-switch for BT.2020/open-GOP sources, progress %, audio-warning suppression, frame-mismatch retry.
+
+### Fixed
+- `av1an-batch-*.sh` scripts referenced a missing `tools/av1an-dispatch.py` since their introduction - now real.
+- `--ssimu2 vs-zip` value now a recognized backend everywhere (was falling through by accident).
+
 ## [2.1.0-linux] - 2026-03-03
 
 ### Fixed

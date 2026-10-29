@@ -1,63 +1,50 @@
 #!/bin/bash
+# Batch live-action encode via av1an-dispatch.py (single pass, no quality boost).
+av1an_settings="--scd 0 --distortion-bias-preset 1 --photon-noise 400"
+FINAL_SPEED="4"
+CRF="30"
+# Set photon noise to 0 if using film-grain
+fork="essential"
+# example forks: 5fish, essential, hdr, custom
+DENOISE="False"
+# DENOISE updates denoise=True/False in settings.txt before dispatch. 5fish should use True; other forks default to False.
+ARCH="x86-64-v3"
 
-# av1an-batch-liveaction-crf30.sh
-# Direct Av1an encode — Live Action CRF 30, single pass (no Auto-Boost).
-# Place source files in Input/, encoded output goes to Output/.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+rm -f tools/bat*.txt
+mv -n *.mkv *.mp4 *.m2ts video-input/ 2>/dev/null
+touch "tools/bat-used-$(basename "$0").txt"
+export PATH="$SCRIPT_DIR/tools/av1an:$PATH"
 
-cd "$(dirname "$0")"
-
-touch "tools/sh-used-$(basename "$0").txt"
-
-WORKER_COUNT=4
-
-# --- STEP 1A: WORKER COUNT CHECK ---
-CONFIG_FILE="tools/workercount-config.txt"
-
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "First Run Detected: Calculating optimal encode worker count..."
-    python3 "tools/workercount.py"
-fi
-
-if [ -f "$CONFIG_FILE" ]; then
-    WORKER_COUNT=$(grep "^workers=" "$CONFIG_FILE" | cut -d= -f2 | tr -d '\r')
-fi
-
-echo "Starting Av1an Batch (Live Action CRF 30) with $WORKER_COUNT workers..."
-
-mkdir -p Input Output
-shopt -s nullglob
-
-for f in Input/*.mkv Input/*.mp4 Input/*.m2ts; do
-    [ -f "$f" ] || continue
-    filename=$(basename -- "$f")
-    stem="${filename%.*}"
-
-    OUTPUT_FILE="Output/${stem}-av1.mkv"
-
-    if [ -f "$OUTPUT_FILE" ]; then
-        echo "Skipping \"$f\" — output already exists."
-        continue
-    fi
-
-    echo "==============================================================================="
-    echo "Processing \"$f\"..."
+read_worker_count() {
+    grep -E "^workers=" tools/workercount-config.txt 2>/dev/null | tail -n 1 | cut -d= -f2
+}
+WORKER_COUNT_CFG="$(read_worker_count)"
+if [ -z "$WORKER_COUNT_CFG" ]; then
     echo "-------------------------------------------------------------------------------"
+    echo "First Run Detected: Calculating optimal encode worker count..."
+    echo "-------------------------------------------------------------------------------"
+    python3 "$SCRIPT_DIR/tools/workercount.py"
+    WORKER_COUNT_CFG="$(read_worker_count)"
+    echo "Encode worker count calculated."
+fi
+WORKER_COUNT="${WORKER_COUNT_CFG:-4}"
 
-    # Live Action Standard (CRF 30) — v1.66 5fish svt-av1-psy, single pass
-    python3 tools/av1an-dispatch.py \
-        -i "$f" \
-        -o "$OUTPUT_FILE" \
-        --quality 30 \
-        --photon-noise 4 \
-        --workers "$WORKER_COUNT" \
-        --final-speed 4 \
-        --autocrop \
-        --final-params "--lp 3 --tune 3 --hbd-mds 1 --keyint 305 --ac-bias 0.8 --filtering-noise-detection 4"
+# --- RENAMING ---
+echo "Starting Renaming Process..."
+python3 "$SCRIPT_DIR/tools/rename.py"
 
-done
+echo "Starting Av1an Direct Dispatcher..."
+echo "Encoding inputs from: video-input"
+echo "Outputs will go to:   video-output"
 
-# --- CLEANUP ---
-echo "Cleaning up temporary files and folders..."
-python3 tools/cleanup.py
+python3 "$SCRIPT_DIR/tools/av1an-dispatch.py" --resume --fork "$fork" --arch "$ARCH" --denoise "$DENOISE" --autocrop --crf "$CRF" --workers "$WORKER_COUNT" --final-speed "$FINAL_SPEED" --final-params "$av1an_settings"
 
+echo ""
 echo "All tasks finished."
+echo "Press Enter to clean up temp files (Ctrl+C to keep them and exit)."
+read -r _
+
+echo "Cleaning up temporary files and folders..."
+python3 "$SCRIPT_DIR/tools/cleanup.py"
