@@ -16,8 +16,104 @@
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 
+# Modifications for auto-boost-av1an portable:
+# Script has been modified to be safer for portable python, added
+# progress percent
+#
+# - Fixed a race condition in x264 based scene detection on Windows:
+#   x264 renames its first pass stats file from `<name>.log.temp` to
+#   `<name>.log` on completion, but the rename can fail if the script's
+#   progress counter has the file open at that moment, leaving only the
+#   `.log.temp` behind and crashing the script with "Unexpected result
+#   from av1an or x264". The script now falls back to reading the
+#   `.log.temp` file when the `.log` file is missing.
+# - Added a return code check after the av1an x264 scene detection
+#   process finishes, so a failed av1an run raises a clear error instead
+#   of silently continuing.
+# - Improved the missing stats file assertion message to list the files
+#   actually present in the x264.logs directory for easier debugging.
+# - Fixed "FRAME MISMATCH" / "encoder crashed: exit code: 0" failures
+#   during x264 based scene detection on HDR/UHD HEVC sources (and
+#   other open-GOP sources). The seek-based ffms2 source filter is
+#   known to truncate or misdecode such streams, delivering fewer
+#   frames to x264 than expected before hitting EOF. The script now
+#   automatically uses the linear, frame-exact BestSource plugin for
+#   the source video whenever it is available (the officially
+#   recommended BestSource configuration of this script), while still
+#   using the faster ffms2 to read Progression Boost's probe encodes.
+#   If BestSource is not installed, the script falls back to the old
+#   ffms2 behaviour and prints a warning.
+# - BestSource is now only used when the source's colour primaries are
+#   detected as BT.2020 (HDR/wide-gamut sources, which are the ones
+#   affected by the ffms2 truncation issue). Detection is done via the
+#   portable package's bundled ffprobe (tools\av1an\ffprobe.exe),
+#   falling back to MediaInfo CLI (tools\MediaInfo_CLI\MediaInfo.exe),
+#   then to any ffprobe/mediainfo found on PATH. If the colour
+#   primaries are anything other than BT.2020, or cannot be detected,
+#   the original ffms2 method is used unchanged.
+# - Fixed `raise subprocess.CalledProcessError` being called without
+#   arguments (which would itself crash with a TypeError) after a
+#   failed av1an based scene detection run, and made the error message
+#   after a failed x264 based scene detection run explain the likely
+#   cause.
+# - Suppressed av1an WARN messages that mention audio (e.g. "WARN
+#   FFmpeg failed to encode audio!"). All av1an runs launched by this
+#   script use "-an" so audio is intentionally discarded, making these
+#   warnings harmless noise. Any WARN line containing the word "audio"
+#   is now filtered out of the av1an subprocess output; all other
+#   output, including progress bars, passes through unchanged.
+# - Added an automatic retry for the x264 based scene detection pass
+#   when it fails with av1an's "FRAME MISMATCH" / "encoder crashed:
+#   exit code: 0". x264 picks its own thread count (1.5x the logical
+#   processor count) and allocates roughly 130 MB per frame thread at
+#   3840x2160 10-bit, about 5.2 GB per worker, so two workers plus this
+#   script's own concurrent VapourSynth scene detection over the same
+#   UHD source can exhaust memory. vspipe's writes into the encoder
+#   pipe then fail with EINVAL/EPIPE, x264 sees a truncated y4m frame,
+#   treats it as end of stream and exits with code 0, and av1an reports
+#   a frame mismatch. The pass is now retried once with x264 capped at
+#   8 threads per worker (about 1.5 GB). x264's frame-parallel
+#   lookahead is thread-count dependent, so a cut can move by a frame
+#   or two versus an uncapped run. The av1an temporary folder is deleted before
+#   the retry because chunks.json caches the previous per-chunk encoder
+#   parameters. If the retry also fails, the error is raised as before.
+# - Replaced the error message shown after a failed x264 based scene
+#   detection run. It previously blamed ffms2 and told the user to
+#   install BestSource on every failure, including runs that had
+#   already used BestSource.
+
+# --- VapourSynth R79 plugin-path bootstrap ---
+# R72 autoloaded VapourSynth\vs-plugins from the portable.vs marker. R78+ dropped
+# that and reads VAPOURSYNTH_EXTRA_PLUGIN_PATH instead, so without this the
+# plugins kept in vs-plugins (wwxd, fmtconv, ...) are invisible and scripts die
+# with "There is no attribute or namespace named <plugin>".
+# Must run before vapoursynth/vstools pull in a core. Child processes inherit it.
+import os as _bootstrap_os
+
+_PLUGIN_ENV_VAR = "VAPOURSYNTH_EXTRA_PLUGIN_PATH"
+
+
+def _ensure_vs_plugin_path():
+    root_dir = _bootstrap_os.path.dirname(_bootstrap_os.path.dirname(_bootstrap_os.path.abspath(__file__)))
+    found = _bootstrap_os.path.join(root_dir, "VapourSynth", "vs-plugins")
+    if not _bootstrap_os.path.isdir(found):
+        return ""
+
+    existing = [part for part in _bootstrap_os.environ.get(_PLUGIN_ENV_VAR, "").split(_bootstrap_os.pathsep) if part]
+    if not existing:
+        # Set a single path: valid whether the core reads one path or a list.
+        _bootstrap_os.environ[_PLUGIN_ENV_VAR] = found
+    elif not any(_bootstrap_os.path.normcase(part) == _bootstrap_os.path.normcase(found) for part in existing):
+        _bootstrap_os.environ[_PLUGIN_ENV_VAR] = _bootstrap_os.pathsep.join(existing + [found])
+
+    return found
+
+
+_ensure_vs_plugin_path()
+# --- end bootstrap ---
 
 import argparse
+from collections import deque
 from collections.abc import Callable
 import copy
 from datetime import datetime
@@ -33,11 +129,29 @@ import re
 # from scipy import fftpack, interpolate, signal, stats
 import shutil
 import subprocess
+import sys
+import threading
 import time
 from typing import Optional
 import traceback
+# Silence the core's plugin-load chatter (API3 deprecation notices, duplicate
+# plugin DLLs). Must run before the first vs.core access, since that is what
+# triggers the autoload that emits them.
+try:
+    import sys as _quiet_sys, os as _quiet_os
+    _quiet_dir = _quiet_os.path.dirname(_quiet_os.path.abspath(__file__))
+    if _quiet_dir not in _quiet_sys.path:
+        _quiet_sys.path.insert(0, _quiet_dir)
+    from vs_quiet import silence_plugin_noise as _silence_plugin_noise
+    _silence_plugin_noise()
+except Exception:
+    pass
+
 import vapoursynth as vs
 from vapoursynth import core
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import source_filter
 
 if platform.system() == "Windows":
     os.system("")
@@ -50,6 +164,138 @@ class NumpyEncoder(json.JSONEncoder):
             return object.tolist()
         else:
             return super(NumpyEncoder, self).default(object)
+
+class RollingFPS:
+    # Rolling-window fps counter for progress displays. `update(count)`
+    # records the cumulative frame count at the current time, and
+    # `current()` returns the rate calculated over only the samples
+    # recorded within the last `window` seconds, so the display reflects
+    # recent speed instead of the average since the very start. Once
+    # `freeze()` is called, the last rolling rate is locked in place and
+    # returned forever after, so a process that has finished keeps
+    # displaying the speed it was running at when it completed.
+    def __init__(self, window=10.0):
+        self.window = window
+        self.samples = deque()
+        self.frozen = None
+
+    def update(self, count):
+        if self.frozen is not None:
+            return
+        now = time.time()
+        self.samples.append((now, count))
+        while len(self.samples) > 2 and now - self.samples[0][0] > self.window:
+            self.samples.popleft()
+
+    def current(self):
+        if self.frozen is not None:
+            return self.frozen
+        if len(self.samples) < 2:
+            return 0.0
+        span = self.samples[-1][0] - self.samples[0][0]
+        if span <= 0.0:
+            return 0.0
+        return (self.samples[-1][1] - self.samples[0][1]) / span
+
+    def freeze(self):
+        if self.frozen is None:
+            self.frozen = self.current()
+        return self.frozen
+
+# ---------------------------------------------------------------------
+# Suppress harmless audio-related WARN messages from av1an.
+# av1an prints warnings such as "WARN FFmpeg failed to encode audio!"
+# directly to the console. Since this script always runs av1an with
+# "-an" (audio is intentionally discarded for scene detection and probe
+# encodes), these warnings are expected and only clutter the progress
+# output. The av1an subprocesses are therefore launched with their
+# stdout/stderr piped through a small filter that drops any WARN line
+# containing the word "audio" and passes everything else (including
+# progress bars drawn with carriage returns and ANSI escapes) through
+# unchanged.
+# ---------------------------------------------------------------------
+
+class OutputCapture:
+    """Thread-safe bounded record of a subprocess's output, so the caller
+    can work out why an av1an run failed after the fact. `markers` are
+    recorded the moment they are seen and are therefore not lost when the
+    bounded segment buffer rolls over on a long run."""
+    MARKERS = (b"FRAME MISMATCH", b"encoder crashed")
+
+    def __init__(self, maxlen=2000):
+        self.segments = deque(maxlen=maxlen)
+        self.markers = set()
+
+    def append(self, segment):
+        # `deque.append` and `set.add` are atomic, so the two pump threads
+        # can call this concurrently without further locking.
+        self.segments.append(segment)
+        for marker in self.MARKERS:
+            if marker in segment:
+                self.markers.add(marker.decode())
+
+    def saw(self, marker):
+        return marker in self.markers
+
+    def clear(self):
+        self.segments.clear()
+        self.markers.clear()
+
+    def text(self):
+        return b"".join(self.segments).decode("utf-8", errors="replace")
+
+def _suppressing_pump(pipe, out_stream, capture=None):
+    def emit(segment):
+        low = segment.lower()
+        if b"warn" in low and b"audio" in low:
+            return
+        if capture is not None:
+            capture.append(segment)
+        try:
+            out_stream.buffer.write(segment)
+            out_stream.flush()
+        except (ValueError, OSError):
+            pass
+
+    buffer = b""
+    try:
+        while True:
+            try:
+                chunk = pipe.read(4096)
+            except (ValueError, OSError):
+                break
+            if not chunk:
+                break
+            buffer += chunk
+            while True:
+                indices = [i for i in (buffer.find(b"\n"), buffer.find(b"\r")) if i != -1]
+                if not indices:
+                    break
+                cut = min(indices) + 1
+                # Keep "\r\n" together as a single terminator
+                if buffer[cut - 1:cut] == b"\r" and buffer[cut:cut + 1] == b"\n":
+                    cut += 1
+                emit(buffer[:cut])
+                buffer = buffer[cut:]
+        if buffer:
+            emit(buffer)
+    finally:
+        try:
+            pipe.close()
+        except (ValueError, OSError):
+            pass
+
+def popen_suppress_audio_warns(command, capture=None):
+    """Drop-in replacement for `subprocess.Popen(command, text=True)` for
+    console-inheriting av1an runs. Pipes the child's stdout and stderr
+    through a filter that hides WARN lines mentioning audio while passing
+    all other output through to this script's own stdout/stderr.
+    `poll()`, `wait()` and `returncode` work as usual. If `capture` is an
+    `OutputCapture`, the forwarded output is recorded in it as well."""
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    threading.Thread(target=_suppressing_pump, args=(process.stdout, sys.stdout, capture), daemon=True).start()
+    threading.Thread(target=_suppressing_pump, args=(process.stderr, sys.stderr, capture), daemon=True).start()
+    return process
 
 parser = argparse.ArgumentParser(prog="Progressive Scene Detection")
 parser.add_argument("-i", "--input", type=Path, required=True, help="Source video file")
@@ -181,6 +427,109 @@ if not resume:
 # ---------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------
+# Colour primaries detection for the portable package.
+# Sources with BT.2020 colour primaries (HDR/wide-gamut) are the ones
+# affected by the ffms2 truncation issue during x264 based scene
+# detection ("FRAME MISMATCH" / "encoder crashed: exit code: 0"), so
+# only they are switched to the linear, frame-exact BestSource plugin.
+# Everything else keeps the original, faster ffms2 method.
+# Detection uses the executables bundled with the portable package,
+# relative to this script:
+#     tools\av1an\ffprobe.exe            (primary)
+#     tools\MediaInfo_CLI\MediaInfo.exe  (fallback)
+# and falls back to ffprobe/mediainfo found on PATH if neither bundled
+# executable exists.
+def _detect_bt2020_color_primaries(file: Path) -> bool:
+    try:
+        script_dir = Path(__file__).resolve().parent
+    except NameError:
+        script_dir = Path.cwd()
+    file = file.expanduser().resolve()
+
+    # Primary method: ffprobe bundled with the portable package
+    ffprobe_candidates = [script_dir / "av1an" / "ffprobe.exe",
+                          script_dir / "av1an" / "ffprobe"]
+    ffprobe = next((str(candidate) for candidate in ffprobe_candidates if candidate.exists()), None)
+    if ffprobe is None:
+        ffprobe = shutil.which("ffprobe")
+    if ffprobe is not None:
+        try:
+            result = subprocess.run([ffprobe, "-v", "quiet",
+                                     "-select_streams", "v:0",
+                                     "-show_entries", "stream=color_primaries",
+                                     "-of", "default=noprint_wrappers=1:nokey=1",
+                                     str(file)],
+                                    capture_output=True, text=True, timeout=120)
+            if result.returncode == 0 and (primaries := result.stdout.strip().splitlines()[0].strip() if result.stdout.strip() else ""):
+                detected = "bt2020" in primaries.lower().replace(".", "")
+                print(f"\r\033[KColour primaries \"{primaries}\" detected by ffprobe / "
+                      f"{'BT.2020 source, using BestSource for reliable decoding' if detected else 'using the original ffms2 method'}", flush=True)
+                return detected
+        except (OSError, subprocess.SubprocessError, IndexError):
+            pass
+
+    # Fallback method: MediaInfo CLI bundled with the portable package
+    mediainfo_candidates = [script_dir / "MediaInfo_CLI" / "MediaInfo.exe",
+                            script_dir / "MediaInfo_CLI" / "mediainfo"]
+    mediainfo = next((str(candidate) for candidate in mediainfo_candidates if candidate.exists()), None)
+    if mediainfo is None:
+        mediainfo = shutil.which("mediainfo")
+    if mediainfo is not None:
+        try:
+            result = subprocess.run([mediainfo, "--Output=Video;%colour_primaries%\\n", str(file)],
+                                    capture_output=True, text=True, timeout=120)
+            if result.returncode == 0 and (primaries := result.stdout.strip().splitlines()[0].strip() if result.stdout.strip() else ""):
+                detected = "bt2020" in primaries.lower().replace(".", "")
+                print(f"\r\033[KColour primaries \"{primaries}\" detected by MediaInfo / "
+                      f"{'BT.2020 source, using BestSource for reliable decoding' if detected else 'using the original ffms2 method'}", flush=True)
+                return detected
+        except (OSError, subprocess.SubprocessError, IndexError):
+            pass
+
+    print("\r\033[K\033[33mWarning: could not detect the source's colour primaries "
+          "(ffprobe and MediaInfo CLI unavailable or returned nothing). "
+          "Using the original ffms2 method. If this is an HDR/BT.2020 source and you see "
+          "\"FRAME MISMATCH\" errors during x264 based scene detection, check that "
+          "tools\\av1an\\ffprobe.exe or tools\\MediaInfo_CLI\\MediaInfo.exe exists in the portable package.\033[0m", flush=True)
+    return False
+
+source_is_bt2020 = _detect_bt2020_color_primaries(input_file)
+
+
+# ---------------------------------------------------------------------
+# Source filter override (tools\source-filter-override.txt, written by
+# bat-builder.py's advanced tools menu).
+#
+# The scenes this script writes are handed to av1an together with a .vpy
+# built by the dispatchers, and av1an trims that .vpy to each scene's
+# frame range. If the two decode the source with different plugins their
+# frame counts can disagree, and the last scene then runs off the end of
+# the clip:
+#     source pipe stderr: Trim: last frame beyond clip end
+#     Svt[error]: Source Width must be at least 4
+# on an empty chunk. So when the override names a source filter, scene
+# detection decodes the source with that same plugin.
+#
+# BT.2020 sources are deliberately left out of this: their BestSource
+# path below is a workaround for a decoding bug rather than a
+# preference, so it keeps winning whatever the override says.
+# ---------------------------------------------------------------------
+source_filter_override = None
+if not source_is_bt2020:
+    source_filter_override = source_filter.read_override()
+    if source_filter_override == source_filter.BESTSOURCE and not hasattr(core, "bs"):
+        print("\r\033[K\033[33mWarning: tools\\source-filter-override.txt selects BestSource but the "
+              "BestSource VapourSynth plugin (`bs`) is not installed. Falling back to ffms2 for scene "
+              "detection.\033[0m", flush=True)
+        source_filter_override = None
+    elif source_filter_override == source_filter.FFMS2 and not hasattr(core, "ffms2"):
+        source_filter_override = None
+    if source_filter_override is not None:
+        print(f"\r\033[KSource filter override: using {source_filter_override} for scene detection, "
+              f"matching the encode's VapourSynth script", flush=True)
+
+
 class DefaultZone:
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
@@ -189,11 +538,48 @@ class DefaultZone:
 # ---------------------------------------------------------------------
 # How should this script load your source video? Select the video
 # provider for both this Python script and for av1an.
-    source_clip = core.ffms2.Source(input_file.expanduser().resolve(), cachefile=temp_dir.joinpath("source.ffindex").expanduser().resolve())
-    source_clip_cache = temp_dir.joinpath("source.ffindex")
-    source_provider = lambda self, file: core.ffms2.Source(file.expanduser().resolve(), cachefile=file.with_suffix(".ffindex").expanduser().resolve())
-    source_provider_cache = lambda self, file: file.with_suffix(".ffindex")
-    source_provider_av1an = "ffms2"
+# Portable package fix: seek-based source filters (ffms2, lsmas) are
+# known to truncate or misdecode HDR/UHD HEVC and other open-GOP
+# sources. During the av1an x264 scene detection pass this surfaces as
+#     WARN Encoder failed (on chunk N):
+#     encoder crashed: exit code: 0
+#     FRAME MISMATCH: chunk N: x/y (actual/expected frames)
+# because the decoder hits EOF after delivering fewer frames than were
+# indexed. BestSource decodes linearly and is frame-exact.
+# Only sources detected as having BT.2020 colour primaries (see the
+# `_detect_bt2020_color_primaries` detector above the class) are
+# switched to BestSource, while the faster ffms2 is still used to read
+# Progression Boost's probe encodes (this is the officially
+# recommended BestSource configuration of this script). All other
+# sources use the original all-ffms2 method. If a BT.2020 source is
+# detected but the BestSource plugin is not installed, the script
+# falls back to the original ffms2 behaviour and prints a warning.
+# A non-BT.2020 source takes the same BestSource path when
+# tools\source-filter-override.txt asks for it, so that the frame count
+# here matches the .vpy the dispatcher hands to av1an (see the
+# `source_filter_override` block above the class).
+    if (source_is_bt2020 or source_filter_override == source_filter.BESTSOURCE) and hasattr(core, "bs"):
+        source_clip = core.bs.VideoSource(input_file.expanduser().resolve())
+        source_clip_cache = None
+        source_provider_av1an = "bestsource"
+        if hasattr(core, "ffms2"):
+            source_provider = lambda self, file: core.ffms2.Source(file.expanduser().resolve(), cachefile=file.with_suffix(".ffindex").expanduser().resolve())
+            source_provider_cache = lambda self, file: file.with_suffix(".ffindex")
+        else:
+            source_provider = core.bs.VideoSource
+            source_provider_cache = lambda self, file: None
+    else:
+        if source_is_bt2020 and not hasattr(core, "bs"):
+            print("\033[33mWarning: this source has BT.2020 colour primaries but the BestSource VapourSynth "
+                  "plugin (`bs`) is not installed. Falling back to ffms2, which is known to truncate or "
+                  "misdecode HDR/UHD HEVC and other open-GOP sources (\"FRAME MISMATCH\" errors during "
+                  "x264 based scene detection). Install BestSource into your portable VapourSynth plugins "
+                  "folder for reliable results.\033[0m", flush=True)
+        source_clip = core.ffms2.Source(input_file.expanduser().resolve(), cachefile=temp_dir.joinpath("source.ffindex").expanduser().resolve())
+        source_clip_cache = temp_dir.joinpath("source.ffindex")
+        source_provider = lambda self, file: core.ffms2.Source(file.expanduser().resolve(), cachefile=file.with_suffix(".ffindex").expanduser().resolve())
+        source_provider_cache = lambda self, file: file.with_suffix(".ffindex")
+        source_provider_av1an = "ffms2"
 # If you want to use BestSource, the recommended way is to use
 # BestSource for source, and then use faster ffms2 to read Progression
 # Boost's probe encodes. To use this option, comment the lines above
@@ -1610,6 +1996,9 @@ if not resume or not scene_detection_scenes_file.exists():
     if scene_detection_perform_x264:
         scene_detection_x264_output_file.unlink(missing_ok=True)
         scene_detection_x264_stats_dir.mkdir(exist_ok=True)
+        if not resume:
+            for scene_detection_x264_stale_log in scene_detection_x264_stats_dir.glob("*.log*"):
+                scene_detection_x264_stale_log.unlink(missing_ok=True)
 
         scene_detection_x264_scenes = {}
         scene_detection_x264_scenes["scenes"] = []
@@ -1667,16 +2056,20 @@ if not resume or not scene_detection_scenes_file.exists():
         scene_detection_x264_scenes["frames"] = scene_detection_x264_total_frames
         scene_detection_x264_scenes["split_scenes"] = scene_detection_x264_scenes["scenes"]
 
-        with scene_detection_x264_scenes_file.open("w") as scene_detection_x264_scenes_f:
-            json.dump(scene_detection_x264_scenes, scene_detection_x264_scenes_f, cls=NumpyEncoder)
+        def scene_detection_write_x264_scenes():
+            with scene_detection_x264_scenes_file.open("w") as scene_detection_x264_scenes_f:
+                json.dump(scene_detection_x264_scenes, scene_detection_x264_scenes_f, cls=NumpyEncoder)
+        scene_detection_write_x264_scenes()
 
-        if zone_default.source_clip_cache_reuse and zone_default.source_clip_cache is not None:
-            scene_detection_x264_temp_dir_cache = scene_detection_x264_temp_dir / "split" / "cache"
-            scene_detection_x264_temp_dir_cache = scene_detection_x264_temp_dir_cache.with_suffix(zone_default.source_clip_cache.suffix)
-            
-            if not scene_detection_x264_temp_dir_cache.exists():
-                scene_detection_x264_temp_dir_cache.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(zone_default.source_clip_cache, scene_detection_x264_temp_dir_cache)
+        def scene_detection_x264_place_cache():
+            if zone_default.source_clip_cache_reuse and zone_default.source_clip_cache is not None:
+                scene_detection_x264_temp_dir_cache = scene_detection_x264_temp_dir / "split" / "cache"
+                scene_detection_x264_temp_dir_cache = scene_detection_x264_temp_dir_cache.with_suffix(zone_default.source_clip_cache.suffix)
+
+                if not scene_detection_x264_temp_dir_cache.exists():
+                    scene_detection_x264_temp_dir_cache.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(zone_default.source_clip_cache, scene_detection_x264_temp_dir_cache)
+        scene_detection_x264_place_cache()
 
         command = [
             "av1an",
@@ -1708,7 +2101,80 @@ if not resume or not scene_detection_scenes_file.exists():
             "--audio-params", "-an",
             "--concat", "mkvmerge"
         ]
-        scene_detection_x264_process = subprocess.Popen(command, text=True)
+        scene_detection_x264_command = list(command)
+        scene_detection_x264_capture = OutputCapture()
+        scene_detection_x264_process = popen_suppress_audio_warns(scene_detection_x264_command,
+                                                                  capture=scene_detection_x264_capture)
+
+        # Fallback for encoder crashes caused by resource exhaustion.
+        # x264 picks its own thread count (1.5x the logical processor
+        # count, so 36 on a 24-thread machine) and allocates roughly
+        # 130 MB per frame thread at 3840x2160 10-bit, about 5.2 GB per
+        # worker. Two workers plus the VapourSynth based scene detection
+        # this script runs concurrently over the same UHD source can
+        # exhaust memory; vspipe's writes into the encoder pipe then fail
+        # with EINVAL/EPIPE, x264 sees a truncated y4m frame, treats it
+        # as end of stream and exits with code 0, and av1an reports
+        #     encoder crashed: exit code: 0
+        #     FRAME MISMATCH: chunk N: x/y (actual/expected frames)
+        # Capping x264 at 8 threads per worker brings this down to about
+        # 1.5 GB per worker, so the whole pass is retried once with that
+        # cap. x264's frame-parallel lookahead is thread-count dependent,
+        # so a cut can move by a frame or two compared with an uncapped
+        # run; that is a far better outcome than losing scene detection
+        # for the file altogether, which is what happens otherwise.
+        scene_detection_x264_fallback_threads = 8
+        def scene_detection_x264_cap_threads():
+            # `split_scenes` is the same list object as `scenes`, so
+            # editing the parameter lists in place covers both.
+            for scene_detection_x264_scene in scene_detection_x264_scenes["scenes"]:
+                scene_detection_x264_video_params = scene_detection_x264_scene["zone_overrides"]["video_params"]
+                if "--threads" not in scene_detection_x264_video_params:
+                    scene_detection_x264_video_params += ["--threads", f"{scene_detection_x264_fallback_threads}"]
+            scene_detection_write_x264_scenes()
+
+        def scene_detection_x264_reset_temp():
+            # av1an caches the resolved per-chunk encoder parameters in
+            # chunks.json, so the temporary folder has to go before the
+            # retry or the new thread cap is ignored.
+            shutil.rmtree(scene_detection_x264_temp_dir, ignore_errors=True)
+            scene_detection_x264_output_file.unlink(missing_ok=True)
+            scene_detection_x264_stats_dir.mkdir(exist_ok=True)
+            for scene_detection_x264_stale_log in scene_detection_x264_stats_dir.glob("*.log*"):
+                scene_detection_x264_stale_log.unlink(missing_ok=True)
+            scene_detection_x264_place_cache()
+
+        scene_detection_match_x264_stats_frame = re.compile(r"^in:\d+ ", re.MULTILINE)
+        def scene_detection_x264_count_stats_frames():
+            counted = 0
+            stats_files = list(scene_detection_x264_stats_dir.glob("*.log")) + \
+                          list(scene_detection_x264_stats_dir.glob("*.log.temp"))
+            for stats_file in stats_files:
+                try:
+                    with stats_file.open("r", errors="replace") as stats_f:
+                        counted += len(scene_detection_match_x264_stats_frame.findall(stats_f.read()))
+                except OSError:
+                    continue
+            return counted
+        scene_detection_x264_progress_time = 0.0
+        scene_detection_x264_progress_frames = 0
+        scene_detection_x264_fps = RollingFPS()
+        scene_detection_x264_fps.update(0)
+        def scene_detection_x264_progress():
+            global scene_detection_x264_progress_time, scene_detection_x264_progress_frames
+            if scene_detection_x264_fps.frozen is None and time.time() - scene_detection_x264_progress_time >= 1:
+                scene_detection_x264_progress_time = time.time()
+                scene_detection_x264_progress_frames = min(scene_detection_x264_count_stats_frames(), scene_detection_x264_total_frames)
+                scene_detection_x264_fps.update(scene_detection_x264_progress_frames)
+            if scene_detection_x264_process.poll() is not None or scene_detection_x264_total_frames <= 0:
+                scene_detection_x264_progress_percent = 100.0
+                scene_detection_x264_progress_frames_display = scene_detection_x264_total_frames_print
+                # The x264 process has finished: lock the rolling fps in place.
+                scene_detection_x264_fps.freeze()
+            else:
+                scene_detection_x264_progress_percent = scene_detection_x264_progress_frames / scene_detection_x264_total_frames * 100
+                scene_detection_x264_progress_frames_display = scene_detection_x264_progress_frames
+            return scene_detection_x264_progress_frames_display, scene_detection_x264_progress_percent, scene_detection_x264_fps.current()
 
 
     if scene_detection_perform_av1an:
@@ -1737,7 +2203,7 @@ if not resume or not scene_detection_scenes_file.exists():
             *zone_default.scene_detection_av1an_parameters(),
             "--force-keyframes", ",".join(scene_detection_av1an_force_keyframes)
         ]
-        scene_detection_process = subprocess.Popen(command, text=True)
+        scene_detection_process = popen_suppress_audio_warns(command)
 
         
     if not scene_detection_diffs_available:
@@ -1751,12 +2217,12 @@ if not resume or not scene_detection_scenes_file.exists():
             scene_detection_min = np.empty((scene_detection_luma_clip.num_frames,), dtype=np.float32)
             scene_detection_max = np.empty((scene_detection_luma_clip.num_frames,), dtype=np.float32)
             for current_frame, frame in enumerate(scene_detection_luma_clip.frames(backlog=48)):
-                print(f"\r\033[K{frame_print(current_frame)} / Measuring frame luminance / {current_frame / (time.time() - start):.2f} fps", end="\r", flush=True)
+                print(f"\r\033[K{frame_print(current_frame)} / {current_frame / scene_detection_luma_clip.num_frames * 100:5.1f}% / Measuring frame luminance / {current_frame / (time.time() - start):.2f} fps", end="\r", flush=True)
                 scene_detection_diffs[current_frame] = frame.props["LumaDiff"]
                 scene_detection_average[current_frame] = frame.props["LumaAverage"]
                 scene_detection_min[current_frame] = frame.props["LumaMin"]
                 scene_detection_max[current_frame] = frame.props["LumaMax"]
-            print(f"\r\033[K{frame_print(current_frame + 1)} / Frame luminance measurement complete / {(current_frame + 1) / (time.time() - start):.2f} fps", end="\n", flush=True)
+            print(f"\r\033[K{frame_print(current_frame + 1)} / 100.0% / Frame luminance measurement complete / {(current_frame + 1) / (time.time() - start):.2f} fps", end="\n", flush=True)
             
             np.savetxt(scene_detection_diffs_file, scene_detection_diffs, fmt="%.9f")
             np.savetxt(scene_detection_average_file, scene_detection_average, fmt="%.9f")
@@ -1789,6 +2255,13 @@ if not resume or not scene_detection_scenes_file.exists():
         zones_diffs = {}
         zones_vapoursynth_scenecut = {}
         zones_luma_scenecut = {}
+        scene_detection_vapoursynth_total_frames = 0
+        for zone in zones:
+            if zone["zone"].scene_detection_method in ["x264_vapoursynth", "vapoursynth"]:
+                scene_detection_vapoursynth_total_frames += zone["end_frame"] - zone["start_frame"]
+        scene_detection_vapoursynth_processed_frames = 0
+        scene_detection_vapoursynth_fps = RollingFPS()
+        scene_detection_vapoursynth_fps.update(0)
         for zone_i, zone in enumerate(zones):
             assert zone["zone"].scene_detection_method in ["av1an", "x264_vapoursynth", "vapoursynth", "external"], "Invalid `scene_detection_method`. Please check your config inside `Progression-Boost.py`."
 
@@ -1807,10 +2280,16 @@ if not resume or not scene_detection_scenes_file.exists():
                 luma_scenecut = np.zeros((scene_detection_clip.num_frames,), dtype=bool)
                 luma_scenecut_prev = True
 
-                start = time.time() - 0.000001
                 for offset_frame, frame in enumerate(scene_detection_clip.frames(backlog=48)):
                     current_frame = zone["start_frame"] + offset_frame
-                    print(f"\r\033[K{frame_print(current_frame)} / Detecting scenes / {offset_frame / (time.time() - start):.2f} fps", end="", flush=True)
+                    scene_detection_vapoursynth_fps.update(scene_detection_vapoursynth_processed_frames + offset_frame + 1)
+                    scene_detection_vapoursynth_line = f"{frame_print(current_frame)} / {(scene_detection_vapoursynth_processed_frames + offset_frame + 1) / scene_detection_vapoursynth_total_frames * 100:5.1f}% / VapourSynth based scene detection / {scene_detection_vapoursynth_fps.current():.2f} fps"
+                    if scene_detection_perform_x264:
+                        scene_detection_x264_line_frames, scene_detection_x264_line_percent, scene_detection_x264_line_fps = scene_detection_x264_progress()
+                        scene_detection_x264_line = f"{frame_print(scene_detection_x264_line_frames)} / {scene_detection_x264_line_percent:5.1f}% / x264 based scene detection / {scene_detection_x264_line_fps:.2f} fps"
+                        print(f"\r\033[K{scene_detection_vapoursynth_line}\n\033[K{scene_detection_x264_line}\033[A\r", end="", flush=True)
+                    else:
+                        print(f"\r\033[K{scene_detection_vapoursynth_line}", end="", flush=True)
 
                     if not scene_detection_diffs_available:
                         scene_detection_diffs[current_frame] = frame.props["LumaDiff"]
@@ -1837,8 +2316,11 @@ if not resume or not scene_detection_scenes_file.exists():
                 zones_diffs[zone_i] = diffs
                 zones_vapoursynth_scenecut[zone_i] = vapoursynth_scenecut
                 zones_luma_scenecut[zone_i] = luma_scenecut
+                scene_detection_vapoursynth_processed_frames += scene_detection_clip.num_frames
 
-        print(f"\r\033[K{frame_print(current_frame + 1)} / VapourSynth based scene detection complete", end="\n", flush=True)
+        print(f"\r\033[K{frame_print(current_frame + 1)} / 100.0% / VapourSynth based scene detection complete / {scene_detection_vapoursynth_fps.freeze():.2f} fps", end="\n", flush=True)
+        if scene_detection_perform_x264:
+            print("\r\033[K", end="", flush=True)
 
     if scene_detection_has_external:
         with input_scenes_file.open("r") as input_scenes_f:
@@ -1852,7 +2334,7 @@ if not resume or not scene_detection_scenes_file.exists():
     if scene_detection_perform_av1an:
         scene_detection_process.wait()
         if scene_detection_process.returncode != 0:
-            raise subprocess.CalledProcessError
+            raise subprocess.CalledProcessError(scene_detection_process.returncode, "av1an (av1an based scene detection)")
 
         assert scene_detection_av1an_scenes_file.exists(), "Unexpected result from av1an"
 
@@ -1867,18 +2349,75 @@ if not resume or not scene_detection_scenes_file.exists():
 
 
     if scene_detection_perform_x264:
-        if scene_detection_x264_process.poll() is None:
-            print(f"\r\033[K{frame_print(0)} / Performing x264 based scene detection", end="", flush=True)
-        scene_detection_x264_process.wait()
-        print(f"\r\033[K{frame_print(scene_detection_x264_total_frames_print)} / x264 based scene detection finished", end="\n", flush=True)
+        scene_detection_x264_retried = False
+        while True:
+            while scene_detection_x264_process.poll() is None:
+                scene_detection_x264_line_frames, scene_detection_x264_line_percent, scene_detection_x264_line_fps = scene_detection_x264_progress()
+                print(f"\r\033[K{frame_print(scene_detection_x264_line_frames)} / {scene_detection_x264_line_percent:5.1f}% / x264 based scene detection / {scene_detection_x264_line_fps:.2f} fps", end="", flush=True)
+                time.sleep(1)
+            scene_detection_x264_process.wait()
+            if scene_detection_x264_process.returncode == 0:
+                break
+
+            # A frame mismatch means x264 stopped reading its input early,
+            # which on a UHD source is usually the machine running out of
+            # memory. Retry once with the thread cap; anything else is a
+            # different problem and is raised straight away.
+            if scene_detection_x264_retried or not scene_detection_x264_capture.saw("FRAME MISMATCH"):
+                print("\r\033[K\033[31mav1an failed during x264 based scene detection.\033[0m", flush=True)
+                if scene_detection_x264_capture.saw("FRAME MISMATCH"):
+                    print(f"\033[31mav1an reported \"FRAME MISMATCH\", meaning x264 received fewer frames than the "
+                          f"chunk should contain. The pass was already retried with x264 capped at "
+                          f"{scene_detection_x264_fallback_threads} threads per worker, so memory pressure alone "
+                          f"does not explain it. Check that the source decodes from start to finish (for example "
+                          f"`vspipe --info` on it), then delete the temporary scene-detection folder before "
+                          f"rerunning.\033[0m", flush=True)
+                else:
+                    print("\033[31mSee the av1an output above for the reason. The temporary scene-detection folder "
+                          "should be deleted before rerunning.\033[0m", flush=True)
+                raise subprocess.CalledProcessError(scene_detection_x264_process.returncode, "av1an (x264 based scene detection)")
+
+            scene_detection_x264_retried = True
+            print(f"\r\033[K\033[33mx264 based scene detection failed with a frame mismatch, which usually means "
+                  f"the machine ran out of memory. Retrying once with x264 capped at "
+                  f"{scene_detection_x264_fallback_threads} threads per worker.\033[0m", flush=True)
+
+            scene_detection_x264_cap_threads()
+            scene_detection_x264_reset_temp()
+            scene_detection_x264_capture.clear()
+            scene_detection_x264_progress_time = 0.0
+            scene_detection_x264_progress_frames = 0
+            scene_detection_x264_fps = RollingFPS()
+            scene_detection_x264_fps.update(0)
+            scene_detection_x264_process = popen_suppress_audio_warns(scene_detection_x264_command,
+                                                                      capture=scene_detection_x264_capture)
+        print(f"\r\033[K{frame_print(scene_detection_x264_total_frames_print)} / 100.0% / x264 based scene detection finished / {scene_detection_x264_fps.freeze():.2f} fps", end="\n", flush=True)
 
         zones_x264_scenecut = {}
         scene_detection_match_x264_I = re.compile(r"^in:(\d+) out:\d+ type:(\w)")
         for zone_i, zone in enumerate(zones):
             x264_scenecut = np.zeros((zone["end_frame"] - zone["start_frame"],), dtype=float)
             def scene_detection_write_x264_scenecut(name, start_frame, end_frame, skip_starting_frames=False):
-                assert (scene_detection_x264_stats_dir / f"{name}.log").exists(), "Unexpected result from av1an or x264"
-                with (scene_detection_x264_stats_dir / f"{name}.log").open("r") as x264_stats_f:
+                x264_stats_file = scene_detection_x264_stats_dir / f"{name}.log"
+                if not x264_stats_file.exists():
+                    # x264 writes first pass stats to `<stats>.log.temp` and renames it to
+                    # `<stats>.log` when the encode finishes. On Windows, this rename fails
+                    # if another process happens to have the file open at that moment. Our
+                    # own progress counter (`scene_detection_x264_count_stats_frames`) reads
+                    # the `.log.temp` files once a second to report progress, so this race
+                    # occasionally leaves a fully written `.log.temp` behind instead of the
+                    # expected `.log` while x264 and av1an still exit successfully. The
+                    # `.log.temp` file contains the same stats lines, so fall back to it.
+                    x264_stats_temp_file = scene_detection_x264_stats_dir / f"{name}.log.temp"
+                    if x264_stats_temp_file.exists():
+                        try:
+                            x264_stats_temp_file.rename(x264_stats_file)
+                        except OSError:
+                            x264_stats_file = x264_stats_temp_file
+                assert x264_stats_file.exists(), \
+                    f"Unexpected result from av1an or x264: stats file \"{name}.log\" was not created in \"{scene_detection_x264_stats_dir}\". " \
+                    f"Files present: {sorted(f.name for f in scene_detection_x264_stats_dir.glob('*'))}"
+                with x264_stats_file.open("r") as x264_stats_f:
                     x264_stats = x264_stats_f.read()
 
                 for line in x264_stats.splitlines():
@@ -3294,7 +3833,7 @@ if metric_has_metric:
             "--scenes", probing_scenes_file,
             *zone_default.probing_av1an_parameters(f"[K[0m[1;3m> Progression Boost [0m[3m{probing_output_file.stem}[0m[1;3m <[0m")
         ]
-        return subprocess.Popen(command, text=True)
+        return popen_suppress_audio_warns(command)
     
     probing_first_tmp_dir = progression_boost_temp_dir / f"probe-encode-first.tmp"
     probing_first_done_file = probing_first_tmp_dir / "done.json"

@@ -5,15 +5,14 @@ def clean_filename(filename):
     # Split filename and extension
     name, ext = os.path.splitext(filename)
     
-    # 1. Remove specific characters: ( ) [ ] !
-    for char in "()[]!":
+    # 1. Remove specific characters: ( ) [ ] ! +
+    for char in "()[]!+":
         name = name.replace(char, "")
     
     # 2. Replace spaces with periods
     name = name.replace(" ", ".")
     
     # 3. Append -source if it's not already there
-    # (This check prevents adding it twice if you re-run the script)
     if not name.endswith("-source"):
         name += "-source"
         
@@ -25,9 +24,9 @@ def main():
         # Process only .mkv files
         if filename.lower().endswith(".mkv"):
             
-            # Skip files that already have -source at the end to prevent double-processing
-            # (Matches logic of the original batch file, but does it per-file)
-            if filename.endswith("-source.mkv"):
+            # Skip files that end in -source, -av1, or -output
+            # Passing a tuple to endswith allows checking multiple suffixes at once
+            if filename.endswith(("-source.mkv", "-av1.mkv", "-output.mkv")):
                 continue
 
             new_name = clean_filename(filename)
