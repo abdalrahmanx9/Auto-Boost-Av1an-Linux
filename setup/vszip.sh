@@ -10,41 +10,62 @@ install_vszip() {
     if command -v pkg-config &> /dev/null; then
         VS_PLUGIN_PATH=$(pkg-config --variable=libdir vapoursynth)/vapoursynth
     else
-        VS_PLUGIN_PATH="/usr/lib/x86_64-linux-gnu/vapoursynth"
+        VS_PLUGIN_PATH="/usr/local/lib/vapoursynth"
     fi
     mkdir -p "$VS_PLUGIN_PATH"
+
+    log_info "Installing VSZIP..."
+    # 1. Check if vapoursynth-vszip wheel is installed via pip
+    if ! pip3 show vapoursynth-vszip &> /dev/null; then
+        pip3 install vapoursynth-vszip --no-deps --break-system-packages || true
+    fi
+
+    # 2. Find and symlink the best suited libvszip.so
+    local VSZIP_LIB
+    VSZIP_LIB="$(find /usr/local/lib/python3* -name "libvszip.so" 2>/dev/null | head -n 1)"
+    if [ -z "$VSZIP_LIB" ]; then
+        VSZIP_LIB="$(find /usr/lib/python3* -name "libvszip.so" 2>/dev/null | head -n 1)"
+    fi
+
+    if [ -n "$VSZIP_LIB" ] && [ -f "$VSZIP_LIB" ]; then
+        ln -sf "$VSZIP_LIB" "$VS_PLUGIN_PATH/libvszip.so"
+        if [ -d "/usr/lib/x86_64-linux-gnu/vapoursynth" ]; then
+            ln -sf "$VSZIP_LIB" "/usr/lib/x86_64-linux-gnu/vapoursynth/libvszip.so"
+        fi
+        log_success "VSZIP installed from python package: $VSZIP_LIB"
+        return 0
+    fi
 
     mkdir -p build_tmp
     cd build_tmp || exit 1
     
-    log_info "Compiling VSZIP..."
+    log_info "Fallback: Compiling VSZIP from source..."
     if [ -d "vszip" ]; then rm -rf vszip; fi
-    git clone --branch R13 --depth 1 https://github.com/dnjulek/vapoursynth-zip.git vszip || { log_error "Failed to clone VSZIP"; cd ..; return 1; }
+    git clone --depth 1 https://github.com/dnjulek/vapoursynth-zip.git vszip || { log_error "Failed to clone VSZIP"; cd ..; return 1; }
     cd vszip || { log_error "Failed to cd into vszip"; cd ..; cd ..; return 1; }
     
-    cd build-help
-    chmod +x build.sh
-    ./build.sh || { log_error "VSZIP build.sh failed"; cd ..; cd ..; cd ..; return 1; }
-    
-    if [ -f "../zig-out/lib/libvszip.so" ]; then
-        cp "../zig-out/lib/libvszip.so" "$VS_PLUGIN_PATH/libvszip.so" || { log_error "Failed to copy libvszip.so"; cd ..; cd ..; cd ..; return 1; }
-        if [ -d "/usr/lib/x86_64-linux-gnu/vapoursynth" ]; then
-            cp "../zig-out/lib/libvszip.so" "/usr/lib/x86_64-linux-gnu/vapoursynth/libvszip.so"
+    if command -v zig &> /dev/null; then
+        zig build -Doptimize=ReleaseFast
+        if [ -f "zig-out/lib/libvszip.so" ]; then
+            cp "zig-out/lib/libvszip.so" "$VS_PLUGIN_PATH/libvszip.so"
         fi
-    else
-        log_error "VSZIP Compilation failed!"
     fi
-    cd ../..
-    
-    ldconfig
+    cd ..
     cd .. # Exit build_tmp
     
-    log_success "VSZIP installed."
+    ldconfig
+    if [ -f "$VS_PLUGIN_PATH/libvszip.so" ]; then
+        log_success "VSZIP installed."
+    else
+        log_error "VSZIP installation failed."
+        return 1
+    fi
 }
 
 uninstall_vszip() {
     log_info "Uninstalling VSZIP..."
     find /usr/local/lib/vapoursynth -name "libvszip.so" -delete
     find /usr/lib/x86_64-linux-gnu/vapoursynth -name "libvszip.so" -delete
+    pip3 uninstall -y vapoursynth-vszip --break-system-packages 2>/dev/null || true
     log_success "VSZIP uninstalled."
 }

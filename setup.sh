@@ -18,10 +18,12 @@ source "$SETUP_DIR/av1an.sh"
 source "$SETUP_DIR/svt_av1.sh"
 source "$SETUP_DIR/ffvship.sh"
 source "$SETUP_DIR/oxipng.sh"
-source "$SETUP_DIR/fssimu2.sh"
 source "$SETUP_DIR/wwxd.sh"
 source "$SETUP_DIR/vszip.sh"
 source "$SETUP_DIR/subtext.sh"
+source "$SETUP_DIR/vs_filters.sh"
+source "$SETUP_DIR/mlrt.sh"
+source "$SETUP_DIR/tq_encoders.sh"
 
 # Dependency Graph Definition
 # Format: declare -A DEPS
@@ -31,12 +33,14 @@ DEPENDENCIES["python_libs"]="system_deps"
 DEPENDENCIES["vapoursynth"]="python_libs system_deps"
 DEPENDENCIES["av1an"]="vapoursynth system_deps"
 DEPENDENCIES["svt_av1"]="system_deps"
-DEPENDENCIES["ffvship"]="system_deps"
+DEPENDENCIES["ffvship"]="vapoursynth system_deps"
 DEPENDENCIES["oxipng"]="system_deps"
-DEPENDENCIES["fssimu2"]="system_deps"
 DEPENDENCIES["wwxd"]="vapoursynth"
 DEPENDENCIES["vszip"]="vapoursynth"
 DEPENDENCIES["subtext"]="vapoursynth"
+DEPENDENCIES["vs_filters"]="vapoursynth"
+DEPENDENCIES["mlrt"]="vapoursynth system_deps"
+DEPENDENCIES["tq_encoders"]="system_deps"
 
 # Helper: Check if a tool is installed
 is_installed() {
@@ -58,13 +62,10 @@ is_installed() {
             command -v SvtAv1EncApp &> /dev/null
             ;;
         "ffvship")
-            command -v FFVship &> /dev/null
+            command -v FFVship &> /dev/null || ls "$(dirname "$(realpath "$0")")/tools/vs-hip/"libvship_*.so &> /dev/null
             ;;
         "oxipng")
             command -v oxipng &> /dev/null
-            ;;
-        "fssimu2")
-            command -v fssimu2 &> /dev/null
             ;;
         "wwxd")
             [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libwwxd.so" ] || \
@@ -80,6 +81,21 @@ is_installed() {
             [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libsubtext.so" ] || \
             [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libsubtext.so" ] || \
             [ -f "/usr/local/lib/vapoursynth/libsubtext.so" ]
+            ;;
+        "vs_filters")
+            [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libakarin.so" ] || \
+            [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libakarin.so" ] || \
+            [ -f "/usr/local/lib/vapoursynth/libakarin.so" ]
+            ;;
+        "mlrt")
+            [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libvstrt.so" ] || \
+            [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libvstrt.so" ] || \
+            [ -f "/usr/local/lib/vapoursynth/libvsort.so" ] || \
+            [ -f "/usr/local/lib/vapoursynth/libvsmigx.so" ]
+            ;;
+        "tq_encoders")
+            [ -x "$(dirname "$(realpath "$0")")/tools/av1an/condor" ] || \
+            ls "$(dirname "$(realpath "$0")")/tools/LQTC"/lqtc-* &> /dev/null
             ;;
         *) return 1 ;;
     esac
@@ -156,10 +172,12 @@ install_tool() {
             "svt_av1") install_svt_av1 ;;
             "ffvship") install_ffvship ;;
             "oxipng") install_oxipng ;;
-            "fssimu2") install_fssimu2 ;;
             "wwxd") install_wwxd ;;
             "vszip") install_vszip ;;
             "subtext") install_subtext ;;
+            "vs_filters") install_vs_filters ;;
+            "mlrt") install_mlrt ;;
+            "tq_encoders") install_tq_encoders ;;
             *) log_error "Unknown module: $item"; exit 1 ;;
         esac
         status=$?
@@ -188,16 +206,18 @@ uninstall_tool() {
         "svt_av1") uninstall_svt_av1 ;;
         "ffvship") uninstall_ffvship ;;
         "oxipng") uninstall_oxipng ;;
-        "fssimu2") uninstall_fssimu2 ;;
         "wwxd") uninstall_wwxd ;;
         "vszip") uninstall_vszip ;;
         "subtext") uninstall_subtext ;;
+        "vs_filters") uninstall_vs_filters ;;
+        "mlrt") uninstall_mlrt ;;
+        "tq_encoders") uninstall_tq_encoders ;;
         *) log_error "Unknown module: $target_tool"; exit 1 ;;
     esac
 }
 
 install_all_tools() {
-    local all_tools=("system_deps" "python_libs" "vapoursynth" "av1an" "svt_av1" "ffvship" "oxipng" "fssimu2" "wwxd" "vszip" "subtext")
+    local all_tools=("system_deps" "python_libs" "vapoursynth" "av1an" "svt_av1" "ffvship" "oxipng" "wwxd" "vszip" "subtext" "vs_filters" "mlrt" "tq_encoders")
     log_info "Starting Full Installation..."
     for t in "${all_tools[@]}"; do
         install_tool "$t" || { log_error "Failed to install $t. Aborting batch."; return 1; }
@@ -205,7 +225,7 @@ install_all_tools() {
 }
 
 uninstall_all_tools() {
-    local all_tools=("system_deps" "python_libs" "vapoursynth" "av1an" "svt_av1" "ffvship" "oxipng" "fssimu2" "wwxd" "vszip" "subtext")
+    local all_tools=("system_deps" "python_libs" "vapoursynth" "av1an" "svt_av1" "ffvship" "oxipng" "wwxd" "vszip" "subtext" "vs_filters" "mlrt" "tq_encoders")
     log_warn "Starting Full Uninstallation..."
     # Reverse order for uninstall
     for (( i=${#all_tools[@]}-1; i>=0; i-- )); do
@@ -226,14 +246,16 @@ show_menu() {
     printf "%-3s %-30s %s\n" "ID" "Module" "Status"
     printf "%-3s %-30s %s\n" "--" "------" "------"
     printf "%-3s %-30s %s\n" "1" "Av1an" "$(get_status_icon av1an)"
-    printf "%-3s %-30s %s\n" "2" "VapourSynth (+FFMS2)" "$(get_status_icon vapoursynth)"
-    printf "%-3s %-30s %s\n" "3" "SVT-AV1-PSY" "$(get_status_icon svt_av1)"
-    printf "%-3s %-30s %s\n" "4" "FFVship" "$(get_status_icon ffvship)"
+    printf "%-3s %-30s %s\n" "2" "VapourSynth (+FFMS2/BestSource)" "$(get_status_icon vapoursynth)"
+    printf "%-3s %-30s %s\n" "3" "SVT-AV1 forks (5fish+essential+hdr)" "$(get_status_icon svt_av1)"
+    printf "%-3s %-30s %s\n" "4" "Vship 5.1.0 + FFVship" "$(get_status_icon ffvship)"
     printf "%-3s %-30s %s\n" "5" "oxipng" "$(get_status_icon oxipng)"
-    printf "%-3s %-30s %s\n" "6" "fssimu2" "$(get_status_icon fssimu2)"
-    printf "%-3s %-30s %s\n" "7" "WWXD" "$(get_status_icon wwxd)"
-    printf "%-3s %-30s %s\n" "8" "VSZIP" "$(get_status_icon vszip)"
-    printf "%-3s %-30s %s\n" "9" "SubText" "$(get_status_icon subtext)"
+    printf "%-3s %-30s %s\n" "6" "WWXD" "$(get_status_icon wwxd)"
+    printf "%-3s %-30s %s\n" "7" "VSZIP 19" "$(get_status_icon vszip)"
+    printf "%-3s %-30s %s\n" "8" "SubText" "$(get_status_icon subtext)"
+    printf "%-3s %-30s %s\n" "9" "Filter plugins" "$(get_status_icon vs_filters)"
+    printf "%-3s %-30s %s\n" "12" "vs-mlrt (AI rescale)" "$(get_status_icon mlrt)"
+    printf "%-3s %-30s %s\n" "13" "Condor + LQTC layout" "$(get_status_icon tq_encoders)"
     echo "----------------------------------------------------------"
     echo "10. System Deps Only"
     echo "11. Python Libs Only"
@@ -289,12 +311,14 @@ show_menu() {
             3) tool="svt_av1" ;;
             4) tool="ffvship" ;;
             5) tool="oxipng" ;;
-            6) tool="fssimu2" ;;
-            7) tool="wwxd" ;;
-            8) tool="vszip" ;;
-            9) tool="subtext" ;;
+            6) tool="wwxd" ;;
+            7) tool="vszip" ;;
+            8) tool="subtext" ;;
+            9) tool="vs_filters" ;;
             10) tool="system_deps" ;;
             11) tool="python_libs" ;;
+            12) tool="mlrt" ;;
+            13) tool="tq_encoders" ;;
             *) log_warn "Invalid option: $choice (skipping)"; continue ;;
         esac
         

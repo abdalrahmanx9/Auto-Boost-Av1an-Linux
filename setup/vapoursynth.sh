@@ -16,18 +16,19 @@ install_vapoursynth() {
     mkdir -p build_tmp
     cd build_tmp || exit 1
     
-    # 1. VapourSynth
+    # 1. VapourSynth (R79 builds with meson; the old autotools flow is gone upstream)
     if [ -d "vapoursynth" ]; then rm -rf vapoursynth; fi
-    git clone --branch R73 --depth 1 https://github.com/vapoursynth/vapoursynth.git || { log_error "Failed to clone VapourSynth"; cd ..; return 1; }
+    git clone --branch R79 --depth 1 https://github.com/vapoursynth/vapoursynth.git || { log_error "Failed to clone VapourSynth"; cd ..; return 1; }
     cd vapoursynth || { log_error "Failed to cd into vapoursynth"; cd ..; cd ..; return 1; }
-    ./autogen.sh || { log_error "VapourSynth autogen failed"; cd ..; cd ..; return 1; }
-    ./configure || { log_error "VapourSynth configure failed"; cd ..; cd ..; return 1; }
-    make -j "$(nproc)" || { log_error "VapourSynth make failed"; cd ..; cd ..; return 1; }
-    make install || { log_error "VapourSynth make install failed"; cd ..; cd ..; return 1; }
+    meson setup build --prefix=/usr/local --buildtype=release || { log_error "VapourSynth meson setup failed"; cd ..; cd ..; return 1; }
+    ninja -C build -j "$(nproc)" || { log_error "VapourSynth ninja build failed"; cd ..; cd ..; return 1; }
+    ninja -C build install || { log_error "VapourSynth ninja install failed"; cd ..; cd ..; return 1; }
+    ldconfig
     cd ..
     
-    # Link Python module if not found
-    local SITE_PKG_DIR="/usr/local/lib/python3.12/site-packages"
+    # Link Python module if not found (R79 installs into the active python's site-packages)
+    local SITE_PKG_DIR
+    SITE_PKG_DIR="$(find /usr/local/lib/python3* -maxdepth 2 -type d -name site-packages 2>/dev/null | sort -V | tail -n 1)"
     local DIST_PKG_DIR="/usr/lib/python3/dist-packages"
     
     if [ -f "$SITE_PKG_DIR/vapoursynth.so" ]; then
@@ -58,7 +59,32 @@ install_vapoursynth() {
         ln -sf "/usr/local/lib/libffms2.so" "$VS_PLUGIN_PATH/libffms2.so"
     fi
 
-    # 3. BestSource (Alternative and preferred VapourSynth Source plugin)
+    # 3. FFmpeg master (BestSource needs libavcodec >= 61.19.0, which Ubuntu
+    #    noble does not ship). Built here rather than in system_deps so the
+    #    "is build-essential present" skip can never silently drop it.
+    log_info "Compiling FFmpeg master from source to satisfy BestSource (libavcodec >= 61.19.0)..."
+    local FDIR="/tmp/ffmpeg_master_build"
+    mkdir -p "$FDIR"
+    cd "$FDIR" || return 1
+    if [ -d "ffmpeg" ]; then rm -rf ffmpeg; fi
+    git clone --depth 1 https://github.com/FFmpeg/FFmpeg.git ffmpeg || { log_error "Failed to clone ffmpeg repo"; cd ..; return 1; }
+    cd ffmpeg || { log_error "Failed to cd into ffmpeg"; cd ..; return 1; }
+    ./configure \
+      --prefix="/usr/local" \
+      --enable-shared \
+      --enable-gpl \
+      --enable-libx264 \
+      --enable-libx265 \
+      --enable-libass \
+      --enable-libfreetype \
+      --disable-doc \
+      --disable-programs || { log_error "FFmpeg configure failed"; cd ..; cd ..; return 1; }
+    make -j"$(nproc)" || { log_error "FFmpeg make failed"; cd ..; cd ..; return 1; }
+    make install || { log_error "FFmpeg make install failed"; cd ..; cd ..; return 1; }
+    ldconfig
+    cd .. # FDIR
+
+    # 4. BestSource (Alternative and preferred VapourSynth Source plugin)
     log_info "Compiling BestSource..."
     if [ -d "bestsource" ]; then rm -rf bestsource; fi
     git clone --depth 1 --recurse-submodules https://github.com/vapoursynth/bestsource.git || { log_error "Failed to clone BestSource"; cd ..; return 1; }
