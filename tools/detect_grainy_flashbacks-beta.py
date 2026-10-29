@@ -31,6 +31,36 @@ Requirements:
 
 from __future__ import annotations
 
+# --- VapourSynth R79 plugin-path bootstrap ---
+# R72 autoloaded VapourSynth\vs-plugins from the portable.vs marker. R78+ dropped
+# that and reads VAPOURSYNTH_EXTRA_PLUGIN_PATH instead, so without this the
+# plugins kept in vs-plugins (wwxd, fmtconv, ...) are invisible and scripts die
+# with "There is no attribute or namespace named <plugin>".
+# Must run before vapoursynth/vstools pull in a core. Child processes inherit it.
+import os as _bootstrap_os
+
+_PLUGIN_ENV_VAR = "VAPOURSYNTH_EXTRA_PLUGIN_PATH"
+
+
+def _ensure_vs_plugin_path():
+    root_dir = _bootstrap_os.path.dirname(_bootstrap_os.path.dirname(_bootstrap_os.path.abspath(__file__)))
+    found = _bootstrap_os.path.join(root_dir, "VapourSynth", "vs-plugins")
+    if not _bootstrap_os.path.isdir(found):
+        return ""
+
+    existing = [part for part in _bootstrap_os.environ.get(_PLUGIN_ENV_VAR, "").split(_bootstrap_os.pathsep) if part]
+    if not existing:
+        # Set a single path: valid whether the core reads one path or a list.
+        _bootstrap_os.environ[_PLUGIN_ENV_VAR] = found
+    elif not any(_bootstrap_os.path.normcase(part) == _bootstrap_os.path.normcase(found) for part in existing):
+        _bootstrap_os.environ[_PLUGIN_ENV_VAR] = _bootstrap_os.pathsep.join(existing + [found])
+
+    return found
+
+
+_ensure_vs_plugin_path()
+# --- end bootstrap ---
+
 import argparse
 import json
 import math
@@ -45,6 +75,19 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import psutil
+# Silence the core's plugin-load chatter (API3 deprecation notices, duplicate
+# plugin DLLs). Must run before the first vs.core access, since that is what
+# triggers the autoload that emits them.
+try:
+    import sys as _quiet_sys, os as _quiet_os
+    _quiet_dir = _quiet_os.path.dirname(_quiet_os.path.abspath(__file__))
+    if _quiet_dir not in _quiet_sys.path:
+        _quiet_sys.path.insert(0, _quiet_dir)
+    from vs_quiet import silence_plugin_noise as _silence_plugin_noise
+    _silence_plugin_noise()
+except Exception:
+    pass
+
 import vapoursynth as vs
 
 core = vs.core
@@ -53,7 +96,6 @@ core = vs.core
 # ----------------------------
 # Progress UI (stderr)
 # ----------------------------
-
 
 def _fmt_hms(seconds: float) -> str:
     if not np.isfinite(seconds) or seconds < 0:
@@ -71,7 +113,6 @@ class Progress:
       Phase x/x <title> | <percent>% | ETA <hh:mm:ss>
     Updated at most once per second (and once at completion).
     """
-
     def __init__(self, title: str, total: int):
         self.title = str(title)
         self.total = max(int(total), 0)
@@ -90,7 +131,7 @@ class Progress:
 
         cur = max(0, min(int(current), self.total))
         now = time.perf_counter()
-        force = cur >= self.total
+        force = (cur >= self.total)
 
         if (now - self.last_print) < 1.0 and not force:
             return
@@ -117,7 +158,6 @@ class Progress:
 
 class PhaseManager:
     """Creates progress trackers with a Phase x/x prefix."""
-
     def __init__(self, total_phases: int):
         self.total = max(int(total_phases), 1)
         self.i = 0
@@ -131,7 +171,6 @@ class PhaseManager:
 # Data classes
 # ----------------------------
 
-
 @dataclass(frozen=True)
 class DFTConfig:
     name: str
@@ -139,9 +178,7 @@ class DFTConfig:
     tbsize: int = 1
     sbsize: int = 16
     sosize: int = 12
-    luma_mask: Optional[Tuple[float, float]] = (
-        None  # not required by core DFTTest; used for vsdenoise curve
-    )
+    luma_mask: Optional[Tuple[float, float]] = None  # not required by core DFTTest; used for vsdenoise curve
 
 
 @dataclass
@@ -156,7 +193,6 @@ class WorkerJob:
 # VapourSynth helpers
 # ----------------------------
 
-
 def _pick_source(path: str) -> vs.VideoNode:
     if hasattr(core, "bs"):
         return core.bs.VideoSource(path)
@@ -164,14 +200,10 @@ def _pick_source(path: str) -> vs.VideoNode:
         return core.lsmas.LWLibavSource(path)
     if hasattr(core, "ffms2"):
         return core.ffms2.Source(path)
-    raise RuntimeError(
-        "No source plugin found. Install BestSource (bs), L-SMASH-Works (lsmas), or FFMS2."
-    )
+    raise RuntimeError("No source plugin found. Install BestSource (bs), L-SMASH-Works (lsmas), or FFMS2.")
 
 
-def _to_gray16(
-    clip: vs.VideoNode, matrix: str = "709", full_range: bool = False
-) -> vs.VideoNode:
+def _to_gray16(clip: vs.VideoNode, matrix: str = "709", full_range: bool = False) -> vs.VideoNode:
     fmt = clip.format
     if fmt is None:
         raise RuntimeError("Clip has no format?")
@@ -192,9 +224,7 @@ def _to_gray16(
         try:
             g = core.std.ShufflePlanes(clip, 0, vs.GRAY)
         except Exception as e:
-            raise RuntimeError(
-                f"Unsupported color family {fmt.color_family} and fallback failed: {e}"
-            )
+            raise RuntimeError(f"Unsupported color family {fmt.color_family} and fallback failed: {e}")
 
     if g.format.sample_type != vs.INTEGER or g.format.bits_per_sample != 16:
         g = core.resize.Bicubic(g, format=vs.GRAY16)
@@ -242,7 +272,6 @@ def _dfttest_denoise(g16: vs.VideoNode, cfg: DFTConfig) -> vs.VideoNode:
     # Preferred: vsdenoise wrapper
     try:
         from vsdenoise import DFTTest as VSDFTTest  # type: ignore
-
         dft = VSDFTTest()
 
         sigma_param: Union[float, Dict[float, float]]
@@ -253,12 +282,9 @@ def _dfttest_denoise(g16: vs.VideoNode, cfg: DFTConfig) -> vs.VideoNode:
 
         attempts = [
             lambda: dft.denoise(
-                g16,
-                sigma_param,
-                tbsize=int(cfg.tbsize),
-                sbsize=int(cfg.sbsize),
-                sosize=int(cfg.sosize),
-                planes=[0],
+                g16, sigma_param,
+                tbsize=int(cfg.tbsize), sbsize=int(cfg.sbsize), sosize=int(cfg.sosize),
+                planes=[0]
             ),
             lambda: dft.denoise(g16, sigma_param, tbsize=int(cfg.tbsize), planes=[0]),
             lambda: dft.denoise(g16, sigma_param, planes=[0]),
@@ -267,12 +293,9 @@ def _dfttest_denoise(g16: vs.VideoNode, cfg: DFTConfig) -> vs.VideoNode:
             curve = {0.0: float(cfg.sigma), 1.0: float(cfg.sigma)}
             attempts += [
                 lambda: dft.denoise(
-                    g16,
-                    curve,
-                    tbsize=int(cfg.tbsize),
-                    sbsize=int(cfg.sbsize),
-                    sosize=int(cfg.sosize),
-                    planes=[0],
+                    g16, curve,
+                    tbsize=int(cfg.tbsize), sbsize=int(cfg.sbsize), sosize=int(cfg.sosize),
+                    planes=[0]
                 ),
                 lambda: dft.denoise(g16, curve, tbsize=int(cfg.tbsize), planes=[0]),
                 lambda: dft.denoise(g16, curve, planes=[0]),
@@ -284,9 +307,7 @@ def _dfttest_denoise(g16: vs.VideoNode, cfg: DFTConfig) -> vs.VideoNode:
                 return a()
             except Exception as e:
                 last_err = e
-        raise RuntimeError(
-            f"vsdenoise.DFTTest exists but all call signatures failed. Last error: {last_err}"
-        )
+        raise RuntimeError(f"vsdenoise.DFTTest exists but all call signatures failed. Last error: {last_err}")
 
     except ModuleNotFoundError:
         pass
@@ -381,10 +402,7 @@ def _extract_metrics_worker(
 # Classification + grouping
 # ----------------------------
 
-
-def _scene_boundaries_from_luma_diff(
-    luma_diff: np.ndarray, q: float = 0.995, floor: float = 0.18
-) -> List[int]:
+def _scene_boundaries_from_luma_diff(luma_diff: np.ndarray, q: float = 0.995, floor: float = 0.18) -> List[int]:
     thr = max(float(np.quantile(luma_diff, q)), float(floor))
     cuts = np.where(luma_diff >= thr)[0].tolist()
     b = sorted(set([0] + cuts + [len(luma_diff)]))
@@ -397,9 +415,7 @@ def _scene_boundaries_from_luma_diff(
     return out
 
 
-def _apply_scene_grouping(
-    mask: np.ndarray, luma_diff: np.ndarray, scene_frac: float
-) -> np.ndarray:
+def _apply_scene_grouping(mask: np.ndarray, luma_diff: np.ndarray, scene_frac: float) -> np.ndarray:
     bounds = _scene_boundaries_from_luma_diff(luma_diff)
     out = np.zeros_like(mask, dtype=bool)
     for a, b in zip(bounds[:-1], bounds[1:]):
@@ -409,9 +425,7 @@ def _apply_scene_grouping(
     return out
 
 
-def _ranges_from_mask(
-    mask: np.ndarray, min_len: int, merge_gap: int
-) -> List[Tuple[int, int]]:
+def _ranges_from_mask(mask: np.ndarray, min_len: int, merge_gap: int) -> List[Tuple[int, int]]:
     ranges: List[Tuple[int, int]] = []
     start: Optional[int] = None
 
@@ -490,7 +504,7 @@ def _calibrate_classifier(
     med_g = float(np.median(scores[idx_g]))
     thr = 0.5 * (med_c + med_g)
 
-    grainy_high = med_g >= med_c
+    grainy_high = (med_g >= med_c)
     mask = scores >= thr if grainy_high else scores <= thr
 
     diag = {
@@ -507,7 +521,6 @@ def _calibrate_classifier(
 # ----------------------------
 # User input parsing
 # ----------------------------
-
 
 def _parse_range(s: str, n_frames: int) -> Tuple[int, int]:
     s = s.strip()
@@ -537,7 +550,6 @@ def _prompt_range(prompt: str, n_frames: int) -> Tuple[int, int]:
 # ----------------------------
 # Resource monitoring + scheduling
 # ----------------------------
-
 
 def _get_free_cpu_ram_percent() -> Tuple[float, float]:
     """
@@ -628,28 +640,14 @@ def _run_metrics_with_dynamic_parallelism(
     out_paths: Dict[str, Path] = {}
 
     # Progress phase: overall metrics completion count
-    p = phases.make(
-        "[Metrics] Extract features (auto-parallel up to 2 workers)",
-        total_steps=len(configs),
-    )
+    p = phases.make("[Metrics] Extract features (auto-parallel up to 2 workers)", total_steps=len(configs))
     completed = 0
 
     # Seed one worker immediately
     if pending:
         cfg = pending.pop(0)
         npz = tmp_dir / f"{cfg.name}.npz"
-        running.append(
-            _start_worker(
-                script_path,
-                input_path,
-                cfg,
-                npz,
-                matrix,
-                full_range,
-                analysis_width,
-                eps,
-            )
-        )
+        running.append(_start_worker(script_path, input_path, cfg, npz, matrix, full_range, analysis_width, eps))
         out_paths[cfg.name] = npz
 
     last_resource_check = time.time()
@@ -668,9 +666,7 @@ def _run_metrics_with_dynamic_parallelism(
                 continue
             running.remove(job)
             if ret != 0:
-                raise RuntimeError(
-                    f"Worker for config {job.cfg.name} failed with exit code {ret}"
-                )
+                raise RuntimeError(f"Worker for config {job.cfg.name} failed with exit code {ret}")
             completed += 1
             p.update(completed)
 
@@ -678,47 +674,18 @@ def _run_metrics_with_dynamic_parallelism(
         while pending and len(running) == 0:
             cfg = pending.pop(0)
             npz = tmp_dir / f"{cfg.name}.npz"
-            running.append(
-                _start_worker(
-                    script_path,
-                    input_path,
-                    cfg,
-                    npz,
-                    matrix,
-                    full_range,
-                    analysis_width,
-                    eps,
-                )
-            )
+            running.append(_start_worker(script_path, input_path, cfg, npz, matrix, full_range, analysis_width, eps))
             out_paths[cfg.name] = npz
 
         # Every check_interval_s while a worker is running, see if we can start a second one
         now = time.time()
-        if (
-            pending
-            and running
-            and len(running) < max_workers
-            and (now - last_resource_check) >= float(check_interval_s)
-        ):
+        if pending and running and len(running) < max_workers and (now - last_resource_check) >= float(check_interval_s):
             last_resource_check = now
             free_cpu, free_ram = _get_free_cpu_ram_percent()
-            if free_cpu >= float(free_cpu_thresh) and free_ram >= float(
-                free_ram_thresh
-            ):
+            if free_cpu >= float(free_cpu_thresh) and free_ram >= float(free_ram_thresh):
                 cfg = pending.pop(0)
                 npz = tmp_dir / f"{cfg.name}.npz"
-                running.append(
-                    _start_worker(
-                        script_path,
-                        input_path,
-                        cfg,
-                        npz,
-                        matrix,
-                        full_range,
-                        analysis_width,
-                        eps,
-                    )
-                )
+                running.append(_start_worker(script_path, input_path, cfg, npz, matrix, full_range, analysis_width, eps))
                 out_paths[cfg.name] = npz
 
         # Keep progress ticking for ETA even if no completions in this second
@@ -736,7 +703,6 @@ def _run_metrics_with_dynamic_parallelism(
 # Phase count
 # ----------------------------
 
-
 def _compute_total_phases() -> int:
     # 1) init
     # 2) metrics
@@ -751,7 +717,6 @@ def _compute_total_phases() -> int:
 # ----------------------------
 # Worker CLI
 # ----------------------------
-
 
 def _worker_main(args: argparse.Namespace) -> None:
     cfg = DFTConfig(
@@ -777,7 +742,6 @@ def _worker_main(args: argparse.Namespace) -> None:
 # Main
 # ----------------------------
 
-
 def main() -> None:
     ap = argparse.ArgumentParser()
 
@@ -785,84 +749,26 @@ def main() -> None:
     ap.add_argument("--input", help="Input video path (worker mode).")
     ap.add_argument("input_pos", nargs="?", help="Input video path (normal mode).")
 
-    ap.add_argument(
-        "--matrix", default="709", help="RGB->GRAY matrix if input is RGB. Default: 709"
-    )
-    ap.add_argument(
-        "--full-range",
-        action="store_true",
-        help="Treat RGB as full range when converting",
-    )
-    ap.add_argument(
-        "--analysis-width",
-        type=int,
-        default=640,
-        help="Downscale width for analysis. Default: 640",
-    )
-    ap.add_argument(
-        "--eps",
-        type=float,
-        default=1e-6,
-        help="Epsilon for ratio division. Default: 1e-6",
-    )
+    ap.add_argument("--matrix", default="709", help="RGB->GRAY matrix if input is RGB. Default: 709")
+    ap.add_argument("--full-range", action="store_true", help="Treat RGB as full range when converting")
+    ap.add_argument("--analysis-width", type=int, default=640, help="Downscale width for analysis. Default: 640")
+    ap.add_argument("--eps", type=float, default=1e-6, help="Epsilon for ratio division. Default: 1e-6")
 
-    ap.add_argument(
-        "--scene-frac",
-        type=float,
-        default=0.35,
-        help="Keep whole scene if >= this fraction flagged. Default: 0.35",
-    )
-    ap.add_argument(
-        "--min-len",
-        type=int,
-        default=12,
-        help="Minimum run length in frames. Default: 12",
-    )
-    ap.add_argument(
-        "--merge-gap", type=int, default=6, help="Merge gaps up to N frames. Default: 6"
-    )
+    ap.add_argument("--scene-frac", type=float, default=0.35, help="Keep whole scene if >= this fraction flagged. Default: 0.35")
+    ap.add_argument("--min-len", type=int, default=12, help="Minimum run length in frames. Default: 12")
+    ap.add_argument("--merge-gap", type=int, default=6, help="Merge gaps up to N frames. Default: 6")
 
-    ap.add_argument(
-        "--encoder",
-        default="svt-av1",
-        help='Encoder token written to txt. Default: "svt-av1"',
-    )
-    ap.add_argument(
-        "--crf", type=int, default=30, help="CRF value written to txt. Default: 30"
-    )
-    ap.add_argument(
-        "--crf-flag", default="--crf", help='CRF flag written to txt. Default: "--crf"'
-    )
+    ap.add_argument("--encoder", default="svt-av1", help='Encoder token written to txt. Default: "svt-av1"')
+    ap.add_argument("--crf", type=int, default=30, help="CRF value written to txt. Default: 30")
+    ap.add_argument("--crf-flag", default="--crf", help='CRF flag written to txt. Default: "--crf"')
 
-    ap.add_argument(
-        "--configs", help="Optional JSON file: list of DFT configs (sigma/tbsize/...)."
-    )
+    ap.add_argument("--configs", help="Optional JSON file: list of DFT configs (sigma/tbsize/...).")
 
     # Dynamic parallelism knobs
-    ap.add_argument(
-        "--max-workers",
-        type=int,
-        default=2,
-        help="Max worker instances (capped at 2). Default: 2",
-    )
-    ap.add_argument(
-        "--resource-check-interval",
-        type=int,
-        default=10,
-        help="Seconds between resource checks. Default: 10",
-    )
-    ap.add_argument(
-        "--free-cpu-threshold",
-        type=float,
-        default=30.0,
-        help="Free CPU%% required to start 2nd worker. Default: 30",
-    )
-    ap.add_argument(
-        "--free-ram-threshold",
-        type=float,
-        default=30.0,
-        help="Free RAM%% required to start 2nd worker. Default: 30",
-    )
+    ap.add_argument("--max-workers", type=int, default=2, help="Max worker instances (capped at 2). Default: 2")
+    ap.add_argument("--resource-check-interval", type=int, default=10, help="Seconds between resource checks. Default: 10")
+    ap.add_argument("--free-cpu-threshold", type=float, default=30.0, help="Free CPU%% required to start 2nd worker. Default: 30")
+    ap.add_argument("--free-ram-threshold", type=float, default=30.0, help="Free RAM%% required to start 2nd worker. Default: 30")
 
     # Worker-only args
     ap.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
@@ -908,9 +814,7 @@ def main() -> None:
                 tbsize=int(item.get("tbsize", 1)),
                 sbsize=int(item.get("sbsize", 16)),
                 sosize=int(item.get("sosize", 12)),
-                luma_mask=tuple(item["luma_mask"])
-                if "luma_mask" in item and item["luma_mask"]
-                else None,
+                luma_mask=tuple(item["luma_mask"]) if "luma_mask" in item and item["luma_mask"] else None,
             )
             configs.append(cfg)
 
@@ -929,12 +833,8 @@ def main() -> None:
     n_frames = int(g16.num_frames)
 
     # Prompt user at start (as requested)
-    clean_range = _prompt_range(
-        "Provide clean frame range for testing, example: 200-300: ", n_frames
-    )
-    grainy_range = _prompt_range(
-        "Provide grainy frame range for testing, example: 1500-1900: ", n_frames
-    )
+    clean_range = _prompt_range("Provide clean frame range for testing, example: 200-300: ", n_frames)
+    grainy_range = _prompt_range("Provide grainy frame range for testing, example: 1500-1900: ", n_frames)
 
     # Phase 2: Metrics extraction (dynamic 1->2 workers)
     script_path = Path(__file__).resolve()
@@ -997,17 +897,13 @@ def main() -> None:
         # Phase 5: Group
         p_grp = phases.make("[Group] Scene-aware grouping", 2)
         p_grp.update(1)
-        grouped_mask = _apply_scene_grouping(
-            raw_mask, luma_diff_ref, scene_frac=float(args.scene_frac)
-        )
+        grouped_mask = _apply_scene_grouping(raw_mask, luma_diff_ref, scene_frac=float(args.scene_frac))
         p_grp.update(2)
 
         # Phase 6: Ranges
         p_rng = phases.make("[Ranges] Build ranges", 2)
         p_rng.update(1)
-        ranges = _ranges_from_mask(
-            grouped_mask, min_len=int(args.min_len), merge_gap=int(args.merge_gap)
-        )
+        ranges = _ranges_from_mask(grouped_mask, min_len=int(args.min_len), merge_gap=int(args.merge_gap))
         p_rng.update(2)
 
         # Phase 7: Write

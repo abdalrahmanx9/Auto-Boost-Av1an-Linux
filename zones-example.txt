@@ -1,0 +1,5 @@
+0 2157 svt-av1 --photon-noise 8 --crf 30 --psy-rd 0.6 --enable-variance-boost 1 --tf-strength 2
+2158 4316 svt-av1 --photon-noise 8 --crf 30 --psy-rd 0.6 --enable-variance-boost 1 --tf-strength 3
+11612 11819 svt-av1 --photon-noise 10 --crf 35 --psy-rd 0.6 --tune 2 --enable-variance-boost 0 --tf-strength 2
+11867 11991 svt-av1 --photon-noise 10 --crf 35 --psy-rd 0.6 --tune 2 --enable-variance-boost 0 --tf-strength 2
+31769 -1 svt-av1 --photon-noise 8 --crf 30 --psy-rd 0.6 --enable-variance-boost 1 --tf-strength 3

@@ -1,3 +1,7 @@
 Above 5.1=640
 5.1=448
-2.0=192
+2.1=320
+2.0=224
+
+#Apply compression to subtitles, this can save hundreds of megabytes for animated signs
+zlib-subtitles=False

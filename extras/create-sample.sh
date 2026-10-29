@@ -3,7 +3,7 @@
 #                            CREATE SAMPLE SCRIPT
 # =============================================================================
 # Creates a 90-second sample from your MKV file for testing encode settings.
-# Clip is taken from the 03:00 to 04:30 timestamp.
+# Defaults to 03:00-04:30; a custom mm:ss-mm:ss range can be given.
 # =============================================================================
 
 echo "Place your mkv file in this folder and run this. It will create a 90 second"
@@ -12,40 +12,13 @@ echo ""
 read -p "Press Enter to continue..."
 
 # Change to script directory
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
-# Check for mkvmerge
-if ! command -v mkvmerge &> /dev/null; then
-    echo "[ERROR] mkvmerge not found. Please install mkvtoolnix:"
-    echo "        sudo apt install mkvtoolnix"
+SCRIPT_PATH="$(cd "$(dirname "$0")/.." && pwd)/tools/create-sample.py"
+if [ ! -f "$SCRIPT_PATH" ]; then
+    echo "[ERROR] Could not find tools/create-sample.py."
     exit 1
 fi
 
-# Find the first MKV file in the current directory
-INPUT_FILE=$(find . -maxdepth 1 -name "*.mkv" -type f | head -n 1)
-
-if [ -z "$INPUT_FILE" ]; then
-    echo "[ERROR] No .mkv files found in this folder."
-    exit 1
-fi
-
-# Get just the filename for the output
-BASENAME=$(basename "$INPUT_FILE")
-OUTPUT_FILE="sample_${BASENAME}"
-
-echo ""
-echo "Processing: $INPUT_FILE"
-echo ""
-
-# Run mkvmerge
-# --no-audio: drops audio tracks
-# --split parts:00:03:00-00:04:30: keeps a 90 second section (3min to 4:30min)
-mkvmerge -o "$OUTPUT_FILE" --no-audio --split parts:00:03:00-00:04:30 "$INPUT_FILE"
-
-if [ $? -eq 0 ]; then
-    echo ""
-    echo "[SUCCESS] Sample created: $OUTPUT_FILE"
-else
-    echo ""
-    echo "[FAILURE] Something went wrong."
-fi
+python3 "$SCRIPT_PATH" "$@"
+exit $?
