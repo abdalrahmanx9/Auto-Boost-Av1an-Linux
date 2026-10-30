@@ -17,18 +17,24 @@ install_system_deps() {
     log_info "Installing System Packages..."
     # Core build tools and libraries
     local DEPS=(
-        software-properties-common ffmpeg x264 mkvtoolnix mkvtoolnix-gui 
+        software-properties-common ffmpeg x264 libx264-dev libx265-dev mkvtoolnix mkvtoolnix-gui 
         python3 python3-pip git curl wget build-essential cmake pkg-config 
         autoconf automake libtool yasm nasm clang libavcodec-dev libavformat-dev 
         libavutil-dev libswscale-dev libavdevice-dev libavfilter-dev  
         libzimg-dev python3-numpy python3-psutil python3-rich jq mediainfo 
-        opus-tools x265 xclip meson ninja-build libass-dev nvidia-cuda-toolkit
+        opus-tools x265 xclip meson ninja-build libass-dev
         python3-dev
         # GUI builder (Tk), mkvpropedit GUI, vs-placebo/vship GPU build deps
         python3-tk libplacebo-dev libvulkan-dev glslang-tools
         # Dependencies for BestSource
         libjpeg-turbo8-dev libwebp-dev libavif-dev libxxhash-dev
     )
+
+    # Only pull heavy CUDA toolkit on NVIDIA hardware
+    if command -v lspci &> /dev/null && lspci -nn 2>/dev/null | grep -iq "\[10de:"; then
+        log_info "NVIDIA GPU detected: adding nvidia-cuda-toolkit..."
+        DEPS+=(nvidia-cuda-toolkit)
+    fi
 
     apt install -y "${DEPS[@]}" || { log_error "Failed to install system dependencies via apt"; return 1; }
 

@@ -530,6 +530,8 @@ def cleanup_temp_folders():
     # 1. Clean up folders starting with a period
     try:
         for item in os.listdir(BASE_DIR):
+            if item.startswith(".git"):
+                continue
             item_path = os.path.join(BASE_DIR, item)
             if os.path.isdir(item_path) and item.startswith("."):
                 deleted = False

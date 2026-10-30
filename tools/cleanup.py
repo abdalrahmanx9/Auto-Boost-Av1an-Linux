@@ -57,6 +57,8 @@ def cleanup_workspace():
         item_path = os.path.join(cwd, item)
 
         if os.path.isdir(item_path):
+            if item.startswith(".git") or item == ".vsjet":
+                continue
             # Check for the specific temp folder suffixes or prefix
             if (item.endswith("-source") or
                 item.endswith("-source_scenedetect.scene-detection.tmp") or

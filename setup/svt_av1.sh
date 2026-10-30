@@ -14,7 +14,7 @@ fi
 # 'custom' is never built: drop your own SvtAv1EncApp into
 #   tools/av1an/svt-av1 forks/custom/x86-64-v3/
 SVT_FISH_REPO="https://github.com/5fish/svt-av1-psy.git"
-SVT_FISH_TAG="v2.3.0-C"
+SVT_FISH_TAG="main"
 SVT_ESSENTIAL_REPO="https://github.com/psy-ex/svt-av1-psy.git"
 SVT_ESSENTIAL_REF="master"
 SVT_HDR_REPO="https://github.com/emrakyz/svt-av1-hdr.git"
@@ -51,7 +51,22 @@ build_svt_fork() {
     make -j "$(nproc)" || { log_error "$name make failed"; cd ../../../..; return 1; }
 
     mkdir -p "$FORK_DIR"
-    cp -v SvtAv1EncApp "$FORK_DIR/SvtAv1EncApp" || { log_error "copy failed"; cd ../../../..; return 1; }
+    local APP_BIN
+    if [ -f "SvtAv1EncApp" ]; then
+        APP_BIN="SvtAv1EncApp"
+    elif [ -f "../../Bin/Release/SvtAv1EncApp" ]; then
+        APP_BIN="../../Bin/Release/SvtAv1EncApp"
+    elif [ -f "Bin/Release/SvtAv1EncApp" ]; then
+        APP_BIN="Bin/Release/SvtAv1EncApp"
+    else
+        APP_BIN="$(find ../.. -name SvtAv1EncApp -type f -perm -111 2>/dev/null | head -n 1)"
+    fi
+
+    if [ -n "$APP_BIN" ] && [ -f "$APP_BIN" ]; then
+        cp -v "$APP_BIN" "$FORK_DIR/SvtAv1EncApp" || { log_error "copy failed"; cd ../../../..; return 1; }
+    else
+        log_error "SvtAv1EncApp binary not found after build"; cd ../../../..; return 1
+    fi
     cd ../../.. # build_tmp/<src>
     cd ..      # build_tmp
     log_info "$name fork installed to: $FORK_DIR"

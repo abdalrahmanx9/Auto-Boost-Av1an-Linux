@@ -8,7 +8,13 @@ fi
 install_oxipng() {
     if ! command -v oxipng &> /dev/null; then
         log_info "Installing oxipng..."
-        source "$HOME/.cargo/env"
+        [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+        if ! command -v cargo &> /dev/null; then
+            log_info "Installing Rust for oxipng..."
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y || { log_error "Failed to install Rust via rustup"; return 1; }
+            source "$HOME/.cargo/env"
+            export PATH="$HOME/.cargo/bin:$PATH"
+        fi
         cargo install oxipng || { log_error "Failed to install oxipng via cargo"; return 1; }
         
         if [ -f "$HOME/.cargo/bin/oxipng" ]; then

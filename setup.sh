@@ -91,7 +91,9 @@ is_installed() {
             [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libvstrt.so" ] || \
             [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libvstrt.so" ] || \
             [ -f "/usr/local/lib/vapoursynth/libvsort.so" ] || \
-            [ -f "/usr/local/lib/vapoursynth/libvsmigx.so" ]
+            [ -f "/usr/local/lib/vapoursynth/libvsmigx.so" ] || \
+            [ -f "/usr/local/lib/vapoursynth/vsncnn.so" ] || \
+            [ -f "/usr/local/lib/vapoursynth/vsov.so" ]
             ;;
         "tq_encoders")
             [ -x "$(dirname "$(realpath "$0")")/tools/av1an/condor" ] || \
@@ -340,7 +342,28 @@ show_menu() {
 check_root
 check_distro
 
-if [ "$1" == "--install" ] && [ -n "$2" ]; then
+if [ "$1" == "--status" ]; then
+    echo "=========================================================="
+    echo "   Auto-Boost-Av1an Setup Status"
+    echo "=========================================================="
+    printf "%-3s %-35s %s\n" "ID" "Module" "Status"
+    printf "%-3s %-35s %s\n" "--" "------" "------"
+    printf "%-3s %-35s %s\n" "1" "Av1an" "$(get_status_icon av1an)"
+    printf "%-3s %-35s %s\n" "2" "VapourSynth (+FFMS2/BestSource)" "$(get_status_icon vapoursynth)"
+    printf "%-3s %-35s %s\n" "3" "SVT-AV1 forks (5fish+essential+hdr)" "$(get_status_icon svt_av1)"
+    printf "%-3s %-35s %s\n" "4" "Vship 5.1.0 + FFVship" "$(get_status_icon ffvship)"
+    printf "%-3s %-35s %s\n" "5" "oxipng" "$(get_status_icon oxipng)"
+    printf "%-3s %-35s %s\n" "6" "WWXD" "$(get_status_icon wwxd)"
+    printf "%-3s %-35s %s\n" "7" "VSZIP 19" "$(get_status_icon vszip)"
+    printf "%-3s %-35s %s\n" "8" "SubText" "$(get_status_icon subtext)"
+    printf "%-3s %-35s %s\n" "9" "Filter plugins" "$(get_status_icon vs_filters)"
+    printf "%-3s %-35s %s\n" "10" "System Deps Only" "$(get_status_icon system_deps)"
+    printf "%-3s %-35s %s\n" "11" "Python Libs Only" "$(get_status_icon python_libs)"
+    printf "%-3s %-35s %s\n" "12" "vs-mlrt (AI rescale)" "$(get_status_icon mlrt)"
+    printf "%-3s %-35s %s\n" "13" "Condor + LQTC layout" "$(get_status_icon tq_encoders)"
+    echo "=========================================================="
+    exit 0
+elif [ "$1" == "--install" ] && [ -n "$2" ]; then
     if [[ "$2" =~ ^[Aa]$ ]]; then
         install_all_tools
     else

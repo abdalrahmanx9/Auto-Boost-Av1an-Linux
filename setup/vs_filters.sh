@@ -54,14 +54,61 @@ build_cmake_plugin() {
 install_vs_filters() {
     log_info "Installing VapourSynth filter plugins..."
 
-    # akarin (expr) - plain cmake
-    build_cmake_plugin "akarin" "https://github.com/AkarinVS/vapoursynth-plugin.git" || true
+    # akarin (expr) - check python package wheel first, then build fallback
+    local AKARIN_SO
+    AKARIN_SO="$(find /usr/local/lib/python* /usr/lib/python* -name "libakarin.so" 2>/dev/null | head -n 1)"
+    if [ -n "$AKARIN_SO" ]; then
+        vsf_install_so "$AKARIN_SO"
+        local AKARIN_DIR="$(dirname "$AKARIN_SO")"
+        local AKARIN_LIBS="$(dirname "$AKARIN_DIR")/vapoursynth_akarin.libs"
+        if [ -d "$AKARIN_LIBS" ]; then
+            echo "$AKARIN_LIBS" > /etc/ld.so.conf.d/vapoursynth_akarin.conf
+            ldconfig
+        fi
+        log_info "akarin installed from wheel ($AKARIN_SO)."
+    else
+        mkdir -p build_tmp && cd build_tmp || return 1
+        [ -d "akarin" ] && rm -rf "akarin"
+        if git clone --depth 1 "https://github.com/AkarinVS/vapoursynth-plugin.git" "akarin"; then
+            cd akarin
+            if meson setup build && ninja -C build; then
+                find build -name "*.so" -type f -exec vsf_install_so {} \;
+                log_info "akarin built and installed."
+            else
+                log_warn "akarin build failed (requires LLVM < 16). Try pip install vapoursynth-akarin."
+            fi
+            cd ..
+        fi
+        cd ..
+    fi
 
-    # AWarp - plain cmake
-    build_cmake_plugin "VapourSynth-AWarp" "https://github.com/HolyWu/VapourSynth-AWarp.git" || true
+    # AWarp - meson
+    mkdir -p build_tmp && cd build_tmp || return 1
+    [ -d "VapourSynth-AWarp" ] && rm -rf "VapourSynth-AWarp"
+    if git clone --depth 1 "https://github.com/HolyWu/VapourSynth-AWarp.git" "VapourSynth-AWarp"; then
+        cd VapourSynth-AWarp
+        if meson setup build && ninja -C build; then
+            find build -name "*.so" -type f -exec vsf_install_so {} \;
+            log_info "AWarp built and installed."
+        else
+            log_warn "AWarp build failed."
+        fi
+        cd ..
+    fi
+    cd ..
 
-    # DFTTest - plain cmake
-    build_cmake_plugin "VapourSynth-DFTTest" "https://github.com/HomeOfVapourSynthEvolution/VapourSynth-DFTTest.git" || true
+    # DFTTest (API 4 build)
+    mkdir -p build_tmp && cd build_tmp || return 1
+    local DFT_URL="https://github.com/RyougiKukoc/VapourSynth-DFTTest-api4/releases/download/v1.1/dfttest-linux-x86_64.zip"
+    if curl -sL -o dfttest-linux-x86_64.zip "$DFT_URL"; then
+        if unzip -o dfttest-linux-x86_64.zip; then
+            find dfttest -name "*.so" -type f -exec vsf_install_so {} \;
+            log_info "DFTTest (API 4) installed."
+        fi
+    else
+        log_warn "DFTTest download failed."
+    fi
+    cd ..
 
     # zsmooth - Zig build like vszip (build-help/build.sh fetches its own Zig)
     mkdir -p build_tmp && cd build_tmp || return 1

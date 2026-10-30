@@ -7,6 +7,10 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:/usr/local/share/pkgconfig:${PKG_CONFIG_PATH}"
+export LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}"
+export VAPOURSYNTH_EXTRA_PLUGIN_PATH="/usr/local/lib/vapoursynth:${VAPOURSYNTH_EXTRA_PLUGIN_PATH}"
+
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }

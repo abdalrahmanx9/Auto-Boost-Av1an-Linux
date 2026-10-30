@@ -54,8 +54,10 @@ install_ffvship() {
         if make build; then
             BUILT_ANY=1
             mkdir -p "$REPO_ROOT/tools/vs-hip" "$REPO_ROOT/tools/FFVship/FFVship_amd"
-            find zig-out -name "libvship*.so" -exec cp -v {} "$REPO_ROOT/tools/vs-hip/libvship_AMD.so" \; 2>/dev/null
-            find . -maxdepth 3 -type f -name "FFVship*" ! -name "*.so" -exec cp -v {} "$REPO_ROOT/tools/FFVship/FFVship_amd/" \; 2>/dev/null
+            [ -f "libvship.so" ] && cp -v "libvship.so" "$REPO_ROOT/tools/vs-hip/libvship_AMD.so"
+            find zig-out -name "libvship*.so" -exec cp -v {} "$REPO_ROOT/tools/vs-hip/libvship_AMD.so" \; 2>/dev/null || true
+            make buildFFVSHIP 2>/dev/null || true
+            [ -f "FFVship" ] && cp -v "FFVship" "$REPO_ROOT/tools/FFVship/FFVship_amd/FFVship" && cp -v "FFVship" /usr/local/bin/FFVship
         else
             log_warn "HIP build failed - continuing with other backends."
         fi
@@ -66,8 +68,11 @@ install_ffvship() {
     if make buildVulkan; then
         BUILT_ANY=1
         mkdir -p "$REPO_ROOT/tools/vs-hip" "$REPO_ROOT/tools/FFVship/FFVship_Vulkan"
-        find zig-out -name "libvship*.so" -exec cp -v {} "$REPO_ROOT/tools/vs-hip/libvship_VULKAN.so" \; 2>/dev/null
-        find . -maxdepth 3 -type f -name "FFVship*" ! -name "*.so" -exec cp -v {} "$REPO_ROOT/tools/FFVship/FFVship_Vulkan/" \; 2>/dev/null
+        [ -f "libvship.so" ] && cp -v "libvship.so" "$REPO_ROOT/tools/vs-hip/libvship_VULKAN.so"
+        find zig-out -name "libvship*.so" -exec cp -v {} "$REPO_ROOT/tools/vs-hip/libvship_VULKAN.so" \; 2>/dev/null || true
+        make buildFFVSHIP 2>/dev/null || true
+        [ -f "FFVship" ] && cp -v "FFVship" "$REPO_ROOT/tools/FFVship/FFVship_Vulkan/FFVship"
+        [ ! -f "/usr/local/bin/FFVship" ] && [ -f "FFVship" ] && cp -v "FFVship" /usr/local/bin/FFVship
     else
         log_warn "Vulkan build failed (libvulkan-dev / glslang-tools installed?)."
     fi
@@ -75,8 +80,11 @@ install_ffvship() {
     [ "$BUILT_ANY" -eq 1 ] || { log_error "No Vship backend could be built."; cd ../..; return 1; }
 
     # FFVship CLI binary (metric streamer used as external ssimu2 backend)
-    make buildFFVSHIP || log_warn "FFVship CLI build failed - vs-hip/vs-zip still available."
-    make install PREFIX=/usr/local || log_warn "System-wide Vship install skipped."
+    if [ ! -f "/usr/local/bin/FFVship" ]; then
+        make buildFFVSHIP || log_warn "FFVship CLI build failed - vs-hip/vs-zip still available."
+        [ -f "FFVship" ] && cp -v "FFVship" /usr/local/bin/FFVship
+    fi
+    make install PREFIX=/usr/local 2>/dev/null || log_warn "System-wide Vship install skipped."
 
     # Activate one libvship in the VapourSynth autoload path (prefer NVIDIA > AMD > Vulkan)
     local AUTOLOAD_DIR BEST=""

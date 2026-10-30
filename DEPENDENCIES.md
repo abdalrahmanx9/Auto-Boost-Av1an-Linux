@@ -8,7 +8,7 @@ The `setup.sh` script installs these automatically (`sudo ./setup.sh`).
 | Software | Version/Tag | Source / Notes |
 | :--- | :--- | :--- |
 | **Av1an** | Latest Git (Master) | [rust-av/Av1an](https://github.com/rust-av/Av1an), via cargo |
-| **SVT-AV1-PSY (5fish)** | **v2.3.0-C** | [5fish/svt-av1-psy](https://github.com/5fish/svt-av1-psy) <br> *Default fork. Built with Clang, PGO, LTO, AVX512, NATIVE; also installed system-wide.* |
+| **SVT-AV1-PSY (5fish)** | **main** | [5fish/svt-av1-psy](https://github.com/5fish/svt-av1-psy) <br> *Default fork (supports `--lineart-psy-bias` & `--texture-psy-bias`). Built with Clang, PGO, LTO, AVX512, NATIVE; also installed system-wide.* |
 | **SVT-AV1-PSY (essential)** | master | [psy-ex/svt-av1-psy](https://github.com/psy-ex/svt-av1-psy) <br> *Fidelity presets `--distortion-bias-preset`.* |
 | **SVT-AV1-HDR** | main | [emrakyz/svt-av1-hdr](https://github.com/emrakyz/svt-av1-hdr) <br> *HDR fork (`--tune`, `--noise`, `--film-grain`).* |
 | **SVT-AV1 (custom)** | user-supplied | Drop `SvtAv1EncApp` into `tools/av1an/svt-av1 forks/custom/x86-64-v3/` |

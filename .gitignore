@@ -4,11 +4,24 @@ __pycache__/
 *$py.class
 
 # Temporary/video-output Folders
-video-input/
-video-output/
+video-input/*
+!video-input/.gitkeep
+video-output/*
+!video-output/.gitkeep
 .temp/
 temp/
 *.log
+logs/
+
+# Local binaries and compiled forks
+tools/av1an/SvtAv1EncApp*
+tools/av1an/svt-av1 forks/
+tools/FFVship/FFVship_*/
+tools/vs-hip/*.so
+tools/*.bsindex
+tools/sample.mkv.*.bsindex
+video-input/*.ffindex
+video-input/*.bsindex
 
 # Runtime state (benchmarks, markers, caches)
 tools/bat-used-*.txt
