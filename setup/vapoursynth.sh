@@ -154,10 +154,23 @@ for target in [pathlib.Path.home() / ".config/vapoursynth/vapoursynth.toml", pat
         cd bestsource || { log_error "Failed to cd into bestsource"; cd ..; cd ..; return 1; }
         git submodule update --init --recursive || true
         
-        # Patch BestSource for VapourSynth API 4.2 compatibility
-        sed -i 's/clip:vnode:all;/clip:vnode;/g' src/vapoursynth.cpp
-        sed -i 's/if (D->GpuExport)/#if BS_GPU\n        if (D->GpuExport)/g' src/vapoursynth.cpp
-        sed -i 's/ffGPUOutput, nullptr, 0, D, Core);/ffGPUOutput, nullptr, 0, D, Core);\n        else\n#endif\n            Node = vsapi->createVideoFilter2("VideoSource", \&D->VI, BestVideoSourceGetFrame, BestVideoSourceFree, fmUnordered, nullptr, 0, D, Core);/g' src/vapoursynth.cpp
+        # Patch BestSource for VapourSynth R79 (API 4.0/4.1) compatibility
+        python3 -c '
+path = "src/vapoursynth.cpp"
+with open(path, "r") as f:
+    c = f.read()
+c = c.replace("clip:vnode:all;", "clip:vnode;")
+target = """        if (D->GpuExport)
+            Node = vsapi->createVideoFilterEx2(\"VideoSource\", &D->VI, BestVideoSourceGetFrame, BestVideoSourceFree, fmUnordered,
+                ffGPUOutput, nullptr, 0, D, Core);
+        else
+            Node = vsapi->createVideoFilter2(\"VideoSource\", &D->VI, BestVideoSourceGetFrame, BestVideoSourceFree, fmUnordered, nullptr, 0, D, Core);"""
+replacement = """        Node = vsapi->createVideoFilter2(\"VideoSource\", &D->VI, BestVideoSourceGetFrame, BestVideoSourceFree, fmUnordered, nullptr, 0, D, Core);"""
+if target in c:
+    c = c.replace(target, replacement)
+with open(path, "w") as f:
+    f.write(c)
+'
 
         export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH"
         pip install meson --break-system-packages || true
