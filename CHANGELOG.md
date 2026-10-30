@@ -2,6 +2,19 @@
 
 All notable changes to the Linux Port of Auto-Boost-Av1an will be documented in this file.
 
+## [3.1.0-linux] - 2026-10-30
+
+Native Arch Linux and CachyOS distribution support.
+
+### Added
+- **Arch Linux & CachyOS Support**: Added `setup/cachyos_deps.sh` using `pacman -Syu --needed --noconfirm` for native package management on Arch, CachyOS, EndeavourOS, and Manjaro.
+- **Pacman Dispatching**: `setup.sh` automatically detects `pacman` and routes system packages, VapourSynth, Av1an, and oxipng through Arch official repositories with fallbacks to source/cargo builds.
+- **Multi-Distro Paths**: Extended plugin and header paths across `setup/wwxd.sh`, `setup/subtext.sh`, `setup/ffvship.sh`, `setup/vszip.sh`, `setup/vs_filters.sh`, and `setup/mlrt.sh` to support `/usr/include/vapoursynth` and `/usr/lib/vapoursynth` alongside `/usr/local`.
+
+### Fixed
+- Fixed SVT-AV1 5fish tag reference in `setup/svt_av1.sh`.
+- Fixed `check_distro` rejecting non-Debian distributions on verified Arch-based systems.
+
 ## [3.0.0-linux] - 2026-10-29
 
 Full catch-up with the Windows suite (feature parity with Windows v3.4.5; Linux version numbers are independent of Windows ones).
