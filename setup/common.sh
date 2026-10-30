@@ -46,12 +46,12 @@ check_distro() {
 
     log_info "Detected Distribution: $DISTRO"
 
-    if [ -f /etc/debian_version ]; then
+    if [ -f /etc/debian_version ] || [[ "$DISTRO_LIKE" =~ "debian" ]] || [[ "$DISTRO_LIKE" =~ "ubuntu" ]]; then
         log_success "Detected Debian/Ubuntu-based system."
+    elif command -v pacman &> /dev/null || [ "$DISTRO" = "arch" ] || [ "$DISTRO" = "cachyos" ] || [[ "$DISTRO_LIKE" =~ "arch" ]]; then
+        log_success "Detected Arch/CachyOS-based system."
     else
-        log_error "Error: This script is officially supported only on Ubuntu/Debian."
-        log_info "Detected: $DISTRO"
-        exit 1
+        log_warn "Distribution '$DISTRO' is not officially verified. Proceeding with caution."
     fi
 }
 

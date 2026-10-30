@@ -87,7 +87,7 @@ install_svt_av1() {
     fi
 
     # 1. 5fish (default fork): PGO+LTO native build, also installed system-wide
-    build_svt_fork "$SVT_FISH_REPO" "$SVT_FISH_TAG" "5fish-svt-av1-psy" \
+    build_svt_fork "$SVT_FISH_REPO" "$SVT_FISH_REF" "5fish-svt-av1-psy" \
         -DENABLE_AVX512=ON -DNATIVE=ON -DSVT_AV1_PGO=ON -DSVT_AV1_LTO=ON \
         || return 1
 

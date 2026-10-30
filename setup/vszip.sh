@@ -32,6 +32,9 @@ install_vszip() {
         if [ -d "/usr/lib/x86_64-linux-gnu/vapoursynth" ]; then
             ln -sf "$VSZIP_LIB" "/usr/lib/x86_64-linux-gnu/vapoursynth/libvszip.so"
         fi
+        if [ -d "/usr/lib/vapoursynth" ]; then
+            ln -sf "$VSZIP_LIB" "/usr/lib/vapoursynth/libvszip.so"
+        fi
         log_success "VSZIP installed from python package: $VSZIP_LIB"
         return 0
     fi
@@ -48,13 +51,16 @@ install_vszip() {
         zig build -Doptimize=ReleaseFast
         if [ -f "zig-out/lib/libvszip.so" ]; then
             cp "zig-out/lib/libvszip.so" "$VS_PLUGIN_PATH/libvszip.so"
+            if [ -d "/usr/lib/vapoursynth" ]; then
+                cp "zig-out/lib/libvszip.so" "/usr/lib/vapoursynth/libvszip.so"
+            fi
         fi
     fi
     cd ..
     cd .. # Exit build_tmp
     
     ldconfig
-    if [ -f "$VS_PLUGIN_PATH/libvszip.so" ]; then
+    if [ -f "$VS_PLUGIN_PATH/libvszip.so" ] || [ -f "/usr/lib/vapoursynth/libvszip.so" ]; then
         log_success "VSZIP installed."
     else
         log_error "VSZIP installation failed."
@@ -64,8 +70,9 @@ install_vszip() {
 
 uninstall_vszip() {
     log_info "Uninstalling VSZIP..."
-    find /usr/local/lib/vapoursynth -name "libvszip.so" -delete
-    find /usr/lib/x86_64-linux-gnu/vapoursynth -name "libvszip.so" -delete
+    find /usr/local/lib/vapoursynth -name "libvszip.so" -delete 2>/dev/null || true
+    find /usr/lib/x86_64-linux-gnu/vapoursynth -name "libvszip.so" -delete 2>/dev/null || true
+    find /usr/lib/vapoursynth -name "libvszip.so" -delete 2>/dev/null || true
     pip3 uninstall -y vapoursynth-vszip --break-system-packages 2>/dev/null || true
     log_success "VSZIP uninstalled."
 }

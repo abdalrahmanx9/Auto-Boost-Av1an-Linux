@@ -13,16 +13,29 @@ install_vapoursynth() {
     # Configure VapourSynth runtime paths (vapoursynth.toml)
     configure_vs_toml() {
         python3 -c '
-import os, pathlib, glob
+import os, pathlib, glob, sys, sysconfig
 paths = [
     "/usr/lib/python3/dist-packages/vapoursynth/libvsscript.so",
     "/usr/local/lib/python3/dist-packages/vapoursynth/libvsscript.so",
     "/usr/local/lib/libvsscript.so",
+    "/usr/lib/libvsscript.so",
 ]
-for p in glob.glob("/usr/local/lib/python3*/dist-packages/vapoursynth/libvsscript.so"):
+for p in glob.glob("/usr/local/lib/python3*/dist-packages/vapoursynth/libvsscript.so") + \
+         glob.glob("/usr/lib/python3*/dist-packages/vapoursynth/libvsscript.so") + \
+         glob.glob("/usr/lib/python3*/site-packages/vapoursynth/libvsscript.so") + \
+         glob.glob("/usr/local/lib/python3*/site-packages/vapoursynth/libvsscript.so"):
     paths.append(p)
-val = ["/usr/bin/python3", "/usr/lib/x86_64-linux-gnu/libpython3.12.so.1.0", "1788171506"]
-lines = [f"\"{p}\" = [\"{val[0]}\", \"{val[1]}\", \"{val[2]}\"]\n" for p in set(paths)]
+
+lib_dir = sysconfig.get_config_var("LIBDIR") or "/usr/lib"
+ldlibrary = sysconfig.get_config_var("LDLIBRARY") or "libpython3.so"
+py_lib = os.path.join(lib_dir, ldlibrary)
+if not os.path.exists(py_lib):
+    candidates = glob.glob(f"/usr/lib*/libpython3*.so*") + glob.glob(f"/usr/lib/*-linux-gnu/libpython3*.so*")
+    if candidates:
+        py_lib = candidates[0]
+
+val = [sys.executable, py_lib, "1788171506"]
+lines = [f"\"{p}\" = [\"{val[0]}\", \"{val[1]}\", \"{val[2]}\"]\n" for p in set(paths) if os.path.exists(p)]
 content = "".join(lines)
 for target in [pathlib.Path.home() / ".config/vapoursynth/vapoursynth.toml", pathlib.Path("/etc/vapoursynth.toml"), pathlib.Path("/root/.config/vapoursynth/vapoursynth.toml")]:
     try:
@@ -32,6 +45,23 @@ for target in [pathlib.Path.home() / ".config/vapoursynth/vapoursynth.toml", pat
         pass
 ' 2>/dev/null || true
     }
+
+    # On Arch/CachyOS, VapourSynth + FFMS2 + BestSource exist in official repos
+    if command -v pacman &> /dev/null; then
+        if ! command -v vspipe &> /dev/null; then
+            log_info "Installing VapourSynth, FFMS2 and BestSource via pacman..."
+            pacman -S --needed --noconfirm vapoursynth ffms2 vapoursynth-plugin-bestsource || {
+                log_error "Failed to install VapourSynth packages via pacman."
+                return 1
+            }
+        else
+            log_info "VapourSynth core is already installed."
+        fi
+        configure_vs_toml
+        mkdir -p /usr/local/lib/vapoursynth /usr/lib/vapoursynth
+        log_success "VapourSynth, FFMS2, and BestSource installed from official repositories."
+        return 0
+    fi
 
     if ! command -v vspipe &> /dev/null; then
         log_info "Compiling VapourSynth from Source..."
@@ -190,6 +220,10 @@ with open(path, "w") as f:
 uninstall_vapoursynth() {
     log_info "Uninstalling VapourSynth, FFMS2, and BestSource..."
     
+    if command -v pacman &> /dev/null; then
+        pacman -Rns --noconfirm vapoursynth ffms2 vapoursynth-plugin-bestsource 2>/dev/null || true
+    fi
+
     # 1. Binaries
     rm -vf /usr/local/bin/vspipe
     

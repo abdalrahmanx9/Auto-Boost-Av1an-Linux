@@ -16,6 +16,7 @@ vsf_plugin_dirs() {
     pkg-config --variable=libdir vapoursynth 2>/dev/null | sed 's|$|/vapoursynth|'
     echo "/usr/local/lib/vapoursynth"
     echo "/usr/lib/x86_64-linux-gnu/vapoursynth"
+    echo "/usr/lib/vapoursynth"
 }
 
 vsf_install_so() {

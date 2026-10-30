@@ -7,6 +7,13 @@ fi
 
 install_oxipng() {
     if ! command -v oxipng &> /dev/null; then
+        if command -v pacman &> /dev/null; then
+            log_info "Installing oxipng via pacman..."
+            if pacman -S --needed --noconfirm oxipng; then
+                log_success "oxipng installed."
+                return 0
+            fi
+        fi
         log_info "Installing oxipng..."
         [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
         if ! command -v cargo &> /dev/null; then

@@ -14,9 +14,11 @@ install_subtext() {
     fi
     mkdir -p "$VS_PLUGIN_PATH"
 
-    # Ensure headers are in /usr/local/include
+    # Ensure headers are found
     if [ -d "/usr/local/include/vapoursynth" ]; then
         cp -sf /usr/local/include/vapoursynth/* /usr/local/include/ 2>/dev/null || true
+    elif [ -d "/usr/include/vapoursynth" ]; then
+        cp -sf /usr/include/vapoursynth/* /usr/include/ 2>/dev/null || true
     fi
 
     mkdir -p build_tmp
@@ -38,6 +40,9 @@ install_subtext() {
         if [ -d "/usr/lib/x86_64-linux-gnu/vapoursynth" ]; then
             cp -v "build/libsubtext.so" "/usr/lib/x86_64-linux-gnu/vapoursynth/"
         fi
+        if [ -d "/usr/lib/vapoursynth" ]; then
+            cp -v "build/libsubtext.so" "/usr/lib/vapoursynth/"
+        fi
     else
         log_error "SubText compilation failed!"
         cd ..; cd ..; return 1
@@ -51,7 +56,8 @@ install_subtext() {
 
 uninstall_subtext() {
     log_info "Uninstalling SubText..."
-    find /usr/local/lib/vapoursynth -name "libsubtext.so" -delete
-    find /usr/lib/x86_64-linux-gnu/vapoursynth -name "libsubtext.so" -delete
+    find /usr/local/lib/vapoursynth -name "libsubtext.so" -delete 2>/dev/null || true
+    find /usr/lib/x86_64-linux-gnu/vapoursynth -name "libsubtext.so" -delete 2>/dev/null || true
+    find /usr/lib/vapoursynth -name "libsubtext.so" -delete 2>/dev/null || true
     log_success "SubText uninstalled."
 }

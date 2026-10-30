@@ -1,6 +1,6 @@
 # Auto-Boost-Av1an for Linux
 
-Portable AV1 encoding suite for Ubuntu/Debian, kept at feature parity with the
+Portable AV1 encoding suite for Linux (Ubuntu/Debian and Arch/CachyOS), kept at feature parity with the
 Windows package. Powered by Av1an + SVT-AV1-PSY forks, VapourSynth R79 and
 GPU metrics (Vship / FFVship).
 

@@ -22,8 +22,14 @@ install_wwxd() {
     clone_exact_commit "https://github.com/dubhater/vapoursynth-wwxd.git" "73c05a4e8202ba935e1eb5ecc0471eb632f973ab" "vapoursynth-wwxd" || { log_error "Failed to clone WWXD"; cd ..; return 1; }
     cd vapoursynth-wwxd || { log_error "Failed to cd into vapoursynth-wwxd"; cd ..; cd ..; return 1; }
     
-    # Check for VapourSynth headers
-    if [ ! -d "/usr/local/include/vapoursynth" ]; then
+    # Check for VapourSynth headers (source installs put them in /usr/local,
+    # distro packages such as Arch/CachyOS put them in /usr)
+    local VS_INCLUDE=""
+    if [ -d "/usr/local/include/vapoursynth" ]; then
+        VS_INCLUDE="/usr/local/include/vapoursynth"
+    elif [ -d "/usr/include/vapoursynth" ]; then
+        VS_INCLUDE="/usr/include/vapoursynth"
+    else
         log_error "VapourSynth headers not found. Please install VapourSynth first."
         exit 1
     fi
@@ -170,13 +176,16 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI
 }
 EOF
     
-    gcc -o libwwxd.so -fPIC -shared -O3 -Wall -Wextra -I. -I/usr/local/include/vapoursynth src/*.c -lm || \
+    gcc -o libwwxd.so -fPIC -shared -O3 -Wall -Wextra -I. -I"$VS_INCLUDE" src/*.c -lm || \
         { log_error "Compilation failed"; cd ..; cd ..; return 1; }
     
     cp -v libwwxd.so "$VS_PLUGIN_PATH/" || { log_error "Failed to copy libwwxd.so"; cd ..; cd ..; return 1; }
     
     if [ -d "/usr/lib/x86_64-linux-gnu/vapoursynth" ]; then
         cp -v libwwxd.so "/usr/lib/x86_64-linux-gnu/vapoursynth/"
+    fi
+    if [ -d "/usr/lib/vapoursynth" ]; then
+        cp -v libwwxd.so "/usr/lib/vapoursynth/"
     fi
     cd ..
     cd .. # Exit build_tmp
@@ -186,7 +195,8 @@ EOF
 
 uninstall_wwxd() {
     log_info "Uninstalling WWXD..."
-    find /usr/local/lib/vapoursynth -name "libwwxd.so" -delete
-    find /usr/lib/x86_64-linux-gnu/vapoursynth -name "libwwxd.so" -delete
+    find /usr/local/lib/vapoursynth -name "libwwxd.so" -delete 2>/dev/null || true
+    find /usr/lib/x86_64-linux-gnu/vapoursynth -name "libwwxd.so" -delete 2>/dev/null || true
+    find /usr/lib/vapoursynth -name "libwwxd.so" -delete 2>/dev/null || true
     log_success "WWXD uninstalled."
 }

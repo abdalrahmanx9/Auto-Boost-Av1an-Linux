@@ -12,6 +12,7 @@ SETUP_DIR="$BASE_DIR/setup"
 source "$SETUP_DIR/common.sh"
 COMMON_SOURCED=true
 source "$SETUP_DIR/system_deps.sh"
+source "$SETUP_DIR/cachyos_deps.sh"
 source "$SETUP_DIR/python_libs.sh"
 source "$SETUP_DIR/vapoursynth.sh"
 source "$SETUP_DIR/av1an.sh"
@@ -47,15 +48,19 @@ is_installed() {
     local tool=$1
     case "$tool" in
         "system_deps") 
-            dpkg -s build-essential &> /dev/null
+            if command -v pacman &> /dev/null; then
+                pacman -Qi clang &> /dev/null
+            else
+                dpkg -s build-essential &> /dev/null
+            fi
             ;;
         "python_libs")
-            pip3 show vsjetpack &> /dev/null
+            pip3 show vsjetpack &> /dev/null || python3 -c 'import vsjetpack' &> /dev/null
             ;;
         "vapoursynth")
             command -v vspipe &> /dev/null && \
-            [ -f "/usr/local/lib/vapoursynth/libffms2.so" ] && \
-            [ -f "/usr/local/lib/vapoursynth/libbestsource.so" ]
+            ([ -f "/usr/local/lib/vapoursynth/libffms2.so" ] || [ -f "/usr/lib/vapoursynth/libffms2.so" ] || [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libffms2.so" ] || [ -f "/usr/lib/libffms2.so" ]) && \
+            ([ -f "/usr/local/lib/vapoursynth/libbestsource.so" ] || [ -f "/usr/lib/vapoursynth/libbestsource.so" ] || [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libbestsource.so" ])
             ;;
         "av1an")
             command -v av1an &> /dev/null
@@ -72,26 +77,31 @@ is_installed() {
         "wwxd")
             [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libwwxd.so" ] || \
             [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libwwxd.so" ] || \
+            [ -f "/usr/lib/vapoursynth/libwwxd.so" ] || \
             [ -f "/usr/local/lib/vapoursynth/libwwxd.so" ]
             ;;
         "vszip")
             [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libvszip.so" ] || \
             [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libvszip.so" ] || \
+            [ -f "/usr/lib/vapoursynth/libvszip.so" ] || \
             [ -f "/usr/local/lib/vapoursynth/libvszip.so" ]
             ;;
         "subtext")
             [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libsubtext.so" ] || \
             [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libsubtext.so" ] || \
+            [ -f "/usr/lib/vapoursynth/libsubtext.so" ] || \
             [ -f "/usr/local/lib/vapoursynth/libsubtext.so" ]
             ;;
         "vs_filters")
             [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libakarin.so" ] || \
             [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libakarin.so" ] || \
+            [ -f "/usr/lib/vapoursynth/libakarin.so" ] || \
             [ -f "/usr/local/lib/vapoursynth/libakarin.so" ]
             ;;
         "mlrt")
             [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libvstrt.so" ] || \
             [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libvstrt.so" ] || \
+            [ -f "/usr/lib/vapoursynth/libvstrt.so" ] || \
             [ -f "/usr/local/lib/vapoursynth/libvsort.so" ] || \
             [ -f "/usr/local/lib/vapoursynth/libvsmigx.so" ] || \
             [ -f "/usr/local/lib/vapoursynth/vsncnn.so" ] || \
@@ -174,7 +184,13 @@ install_tool() {
         log_info "Installing: $item"
         local status=0
         case "$item" in
-            "system_deps") install_system_deps ;;
+            "system_deps")
+                if command -v pacman &> /dev/null; then
+                    install_cachyos_deps
+                else
+                    install_system_deps
+                fi
+                ;;
             "python_libs") install_python_libs ;;
             "vapoursynth") install_vapoursynth ;;
             "av1an") install_av1an ;;
@@ -210,7 +226,13 @@ uninstall_tool() {
     fi
     
     case "$target_tool" in
-        "system_deps") uninstall_system_deps ;;
+        "system_deps")
+            if command -v pacman &> /dev/null; then
+                uninstall_cachyos_deps
+            else
+                uninstall_system_deps
+            fi
+            ;;
         "python_libs") uninstall_python_libs ;;
         "vapoursynth") uninstall_vapoursynth ;;
         "av1an") uninstall_av1an ;;
