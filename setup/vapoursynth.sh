@@ -187,7 +187,7 @@ with open(path, "w") as f:
 }
 
 uninstall_vapoursynth() {
-    log_info "Uninstalling VapourSynth and FFMS2..."
+    log_info "Uninstalling VapourSynth, FFMS2, and BestSource..."
     
     # 1. Binaries
     rm -vf /usr/local/bin/vspipe
@@ -195,11 +195,13 @@ uninstall_vapoursynth() {
     # 2. Libraries
     rm -vf /usr/local/lib/libvapoursynth*
     rm -vf /usr/local/lib/libffms2*
+    rm -vf /usr/local/lib/libbestsource*
     rm -vf /usr/local/lib/vapoursynth.so
     
     # 3. Headers
     rm -rf /usr/local/include/vapoursynth
     rm -rf /usr/local/include/ffms2
+    rm -rf /usr/local/include/bestsource
     
     # 4. Plugins
     rm -rf /usr/local/lib/vapoursynth

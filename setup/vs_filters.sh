@@ -88,7 +88,9 @@ install_vs_filters() {
     if clone_exact_commit "https://github.com/HolyWu/VapourSynth-AWarp.git" "86d1d4067b823f72511760499006df6c93015f44" "VapourSynth-AWarp"; then
         cd VapourSynth-AWarp
         if meson setup build && ninja -C build; then
-            find build -name "*.so" -type f -exec vsf_install_so {} \;
+            for so in $(find build -name "*.so" -type f); do
+                vsf_install_so "$so"
+            done
             log_info "AWarp built and installed."
         else
             log_warn "AWarp build failed."
@@ -102,7 +104,9 @@ install_vs_filters() {
     local DFT_URL="https://github.com/RyougiKukoc/VapourSynth-DFTTest-api4/releases/download/v1.1/dfttest-linux-x86_64.zip"
     if curl -sL -o dfttest-linux-x86_64.zip "$DFT_URL"; then
         if unzip -o dfttest-linux-x86_64.zip; then
-            find dfttest -name "*.so" -type f -exec vsf_install_so {} \;
+            for so in $(find dfttest -name "*.so" -type f); do
+                vsf_install_so "$so"
+            done
             log_info "DFTTest (API 4) installed."
         fi
     else
@@ -110,27 +114,37 @@ install_vs_filters() {
     fi
     cd ..
 
-    # zsmooth (Pinned commit 187ae30) - Zig build like vszip (build-help/build.sh fetches its own Zig)
-    mkdir -p build_tmp && cd build_tmp || return 1
-    if [ -d "zsmooth" ]; then rm -rf zsmooth; fi
-    clone_exact_commit "https://github.com/adworacz/zsmooth.git" "187ae3011979b8064baf46034a2771b7f018a1c6" "zsmooth" || { log_warn "clone failed: zsmooth"; cd ..; }
-    if [ -d "zsmooth" ]; then
-        cd zsmooth || { cd ..; }
-        if [ -d "build-help" ]; then
-            cd build-help && chmod +x build.sh && ./build.sh \
-                && find .. -name "libzsmooth.so" -type f -exec vsf_install_so {} \; \
-                || log_warn "zsmooth build failed."
+    # zsmooth (Pinned commit 187ae30) - check wheel first, then Zig build
+    local ZSMOOTH_SO
+    ZSMOOTH_SO="$(find /usr/local/lib/python* /usr/lib/python* -name "libzsmooth.so" 2>/dev/null | head -n 1)"
+    if [ -n "$ZSMOOTH_SO" ]; then
+        vsf_install_so "$ZSMOOTH_SO"
+        log_info "zsmooth installed from wheel ($ZSMOOTH_SO)."
+    else
+        mkdir -p build_tmp && cd build_tmp || return 1
+        if [ -d "zsmooth" ]; then rm -rf zsmooth; fi
+        clone_exact_commit "https://github.com/adworacz/zsmooth.git" "187ae3011979b8064baf46034a2771b7f018a1c6" "zsmooth" || { log_warn "clone failed: zsmooth"; cd ..; }
+        if [ -d "zsmooth" ]; then
+            cd zsmooth || { cd ..; }
+            if [ -d "build-help" ]; then
+                cd build-help && chmod +x build.sh && ./build.sh
+                for so in $(find .. -name "libzsmooth.so" -type f); do
+                    vsf_install_so "$so"
+                done
+                cd ..
+            elif command -v zig &> /dev/null; then
+                if zig build -Doptimize=ReleaseFast; then
+                    for so in $(find . -name "libzsmooth.so" -type f); do
+                        vsf_install_so "$so"
+                    done
+                fi
+            else
+                log_warn "zsmooth: no build-help/build.sh and no zig installed."
+            fi
             cd ..
-        elif command -v zig &> /dev/null; then
-            zig build -Doptimize=ReleaseFast \
-                && find . -name "libzsmooth.so" -type f -exec vsf_install_so {} \; \
-                || log_warn "zsmooth zig build failed."
-        else
-            log_warn "zsmooth: no build-help/build.sh and no zig installed."
         fi
-        cd ..
+        cd .. # exit build_tmp
     fi
-    cd .. # exit build_tmp
 
     # vs-placebo (Pinned tag 2.0.4: 3cfd23f) - meson, needs libplacebo-dev
     mkdir -p build_tmp && cd build_tmp || return 1

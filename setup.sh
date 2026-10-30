@@ -53,7 +53,9 @@ is_installed() {
             pip3 show vsjetpack &> /dev/null
             ;;
         "vapoursynth")
-            command -v vspipe &> /dev/null
+            command -v vspipe &> /dev/null && \
+            [ -f "/usr/local/lib/vapoursynth/libffms2.so" ] && \
+            [ -f "/usr/local/lib/vapoursynth/libbestsource.so" ]
             ;;
         "av1an")
             command -v av1an &> /dev/null
