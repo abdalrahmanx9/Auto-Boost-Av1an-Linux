@@ -136,6 +136,7 @@ for target in [pathlib.Path.home() / ".config/vapoursynth/vapoursynth.toml", pat
               --enable-gpl \
               --enable-libx264 \
               --enable-libx265 \
+              --enable-libdav1d \
               --enable-libass \
               --enable-libfreetype \
               --disable-doc \

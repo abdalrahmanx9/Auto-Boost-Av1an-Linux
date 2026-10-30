@@ -26,8 +26,8 @@ install_system_deps() {
         python3-dev
         # GUI builder (Tk), mkvpropedit GUI, vs-placebo/vship GPU build deps
         python3-tk libplacebo-dev libvulkan-dev glslang-tools
-        # Dependencies for BestSource
-        libjpeg-turbo8-dev libwebp-dev libavif-dev libxxhash-dev
+        # Dependencies for BestSource and AV1 decoders
+        libjpeg-turbo8-dev libwebp-dev libavif-dev libxxhash-dev libdav1d-dev
     )
 
     # Only pull heavy CUDA toolkit on NVIDIA hardware
