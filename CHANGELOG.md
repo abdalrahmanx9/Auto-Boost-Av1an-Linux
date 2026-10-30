@@ -15,6 +15,10 @@ Full catch-up with the Windows suite (feature parity with Windows v3.4.5; Linux 
 - **Folder layout**: `Input/`/`Output/` renamed to `video-input/`/`video-output/` matching the Windows package.
 - **Main engine** moved to `tools/Auto-Boost-Av1an.py` (Windows layout).
 - **Installer**: VapourSynth R73 -> **R79**, vsjetpack pinned **2.2.2**, Vship **5.1.0** (builds CUDA/HIP/Vulkan libvship + FFVship variants into `tools/vs-hip` + `tools/FFVship`), VSZIP **R19**, SVT-AV1 installed as a fork scheme (`tools/av1an/svt-av1 forks/<5fish|essential|hdr|custom>/<arch>/`), new modules: filter plugins (akarin, AWarp, DFTTest, zsmooth, vs-placebo), vs-mlrt (AI rescale), Condor/LQTC layout.
+- **Dependency Pinning**: 100% of all git clone and build dependencies across all 13 modules locked to exact verified commit hashes in `DEPENDENCIES.md` for reproducible builds.
+- **Non-Interactive Setup**: Full automated batch install/uninstall support (`sudo ./setup.sh --install all -y` and `sudo ./setup.sh --uninstall all -y`) with component status check (`--status`).
+- **AV1 Decoder Integration**: Added `libdav1d-dev` and compiled FFmpeg master with `--enable-libdav1d` to ensure FFMS2 and BestSource decode AV1 fast-pass video without empty frame errors.
+- **VapourSynth R79 Compatibility**: Robust BestSource patch and filter plugin installation loop in `setup/vs_filters.sh`.
 
 ### Added - Encoding workflows
 - **Fork system** (`--fork 5fish|essential|hdr|custom`, `--arch x86-64-v3|znver2|avx512`): dynamic SVT-AV1 fork selection with AVX-512 detection via `/proc/cpuinfo`.
