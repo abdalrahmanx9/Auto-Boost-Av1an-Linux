@@ -14,7 +14,7 @@ The `setup.sh` script installs these automatically (`sudo ./setup.sh`).
 | **SVT-AV1 (custom)** | user-supplied | Drop `SvtAv1EncApp` into `tools/av1an/svt-av1 forks/custom/x86-64-v3/` |
 | **VapourSynth** | `acabf60` (**R79**) | [vapoursynth/vapoursynth](https://github.com/vapoursynth/vapoursynth) (source build) |
 | **FFMS2** | `7ed5e4d` (**5.0**) | [FFMS/ffms2](https://github.com/FFMS/ffms2) (pinned for FFmpeg compatibility) |
-| **FFmpeg** | `b6d737a` (master) | Compiled to /usr/local for BestSource (libavcodec >= 61.19.0) |
+| **FFmpeg** | `b6d737a` (master) | Compiled to /usr/local for BestSource (libavcodec >= 61.19.0) with `--enable-libdav1d` |
 | **BestSource** | `9faf675` | [vapoursynth/bestsource](https://github.com/vapoursynth/bestsource) |
 | **MKVToolNix** | Repository Version | Standard Ubuntu/Debian Repos (`mkvmerge`, `mkvpropedit`, `mkvtoolnix-gui`) |
 | **x264 / x265** | Repository Version | `apt install x264 x265` (lossless intermediaries, prefilter) |

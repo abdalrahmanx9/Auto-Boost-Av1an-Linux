@@ -9,8 +9,14 @@ GPU metrics (Vship / FFVship).
 ## Quick Start
 
 ```bash
-sudo ./setup.sh            # install everything (modular; menu-driven)
-./autoboost-anime-crf30.sh # drop files into video-input/ and run a premade script
+# Automated install of all dependencies (non-interactive):
+sudo ./setup.sh --install all -y
+
+# Check installation status anytime:
+sudo ./setup.sh --status
+
+# Drop files into video-input/ and run a premade script:
+./autoboost-anime-crf30.sh
 ```
 
 Or build your own script with the guided questionnaire:
@@ -155,9 +161,12 @@ tuned values back into themselves.
 ## Installation
 
 ```bash
-sudo ./setup.sh                # interactive menu
-sudo ./setup.sh --install A    # everything
-sudo ./setup.sh --install 3    # just SVT-AV1 forks
+sudo ./setup.sh                   # interactive menu
+sudo ./setup.sh --install all     # install all modules
+sudo ./setup.sh --install all -y  # non-interactive full installation
+sudo ./setup.sh --status          # check status of all modules
+sudo ./setup.sh --uninstall all -y# clean uninstall of all modules
+sudo ./setup.sh --install 3       # install single module (e.g. SVT-AV1 forks)
 ```
 
 Modules: system deps, python libs, VapourSynth R79 (+FFMS2/BestSource),
