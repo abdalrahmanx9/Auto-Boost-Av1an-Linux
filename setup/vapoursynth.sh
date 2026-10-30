@@ -37,9 +37,9 @@ for target in [pathlib.Path.home() / ".config/vapoursynth/vapoursynth.toml", pat
         log_info "Compiling VapourSynth from Source..."
         cd build_tmp || exit 1
         
-        # 1. VapourSynth (R79 builds with meson; the old autotools flow is gone upstream)
+        # 1. VapourSynth R79 (Pinned commit acabf60)
         if [ -d "vapoursynth" ]; then rm -rf vapoursynth; fi
-        git clone --branch R79 --depth 1 https://github.com/vapoursynth/vapoursynth.git || { log_error "Failed to clone VapourSynth"; cd ..; return 1; }
+        clone_exact_commit "https://github.com/vapoursynth/vapoursynth.git" "acabf605b2205b32d65859bb2736405719d2fafd" "vapoursynth" || { log_error "Failed to clone VapourSynth"; cd ..; return 1; }
         cd vapoursynth || { log_error "Failed to cd into vapoursynth"; cd ..; cd ..; return 1; }
         meson setup build --prefix=/usr/local --buildtype=release || { log_error "VapourSynth meson setup failed"; cd ..; cd ..; return 1; }
         ninja -C build -j "$(nproc)" || { log_error "VapourSynth ninja build failed"; cd ..; cd ..; return 1; }
@@ -100,13 +100,12 @@ for target in [pathlib.Path.home() / ".config/vapoursynth/vapoursynth.toml", pat
         ln -sfn "$VS_PLUGIN_PATH" "$DIST_PKG_DIR/vapoursynth/plugins" 2>/dev/null || true
     fi
 
-    # 2. FFMS2
+    # 2. FFMS2 (Pinned to 5.0 commit 7ed5e4d)
     if [ ! -f "$VS_PLUGIN_PATH/libffms2.so" ] && [ ! -f "/usr/local/lib/libffms2.so" ]; then
         log_info "Compiling FFMS2..."
         cd "$BASE_DIR/build_tmp" || exit 1
         if [ -d "ffms2" ]; then rm -rf ffms2; fi
-        # Use tag 5.0 (compatible with FFmpeg 6.x on Ubuntu 24.04)
-        git clone --branch 5.0 --depth 1 https://github.com/FFMS/ffms2.git || { log_error "Failed to clone FFMS2"; cd ..; return 1; }
+        clone_exact_commit "https://github.com/FFMS/ffms2.git" "7ed5e4d039ca9a6236bd2ebdfdd656c4304fbe04" "ffms2" || { log_error "Failed to clone FFMS2"; cd ..; return 1; }
         cd ffms2 || { log_error "Failed to cd into ffms2"; cd ..; cd ..; return 1; }
         ./autogen.sh || { log_error "FFMS2 autogen failed"; cd ..; cd ..; return 1; }
         export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH"
@@ -120,14 +119,14 @@ for target in [pathlib.Path.home() / ".config/vapoursynth/vapoursynth.toml", pat
         ln -sf "/usr/local/lib/libffms2.so" "$VS_PLUGIN_PATH/libffms2.so"
     fi
 
-    # 3. FFmpeg master & BestSource
+    # 3. FFmpeg master & BestSource (Pinned FFmpeg commit b6d737a, BestSource 9faf675)
     if [ ! -f "$VS_PLUGIN_PATH/libbestsource.so" ]; then
         log_info "Compiling FFmpeg master from source to satisfy BestSource..."
         local FDIR="/tmp/ffmpeg_master_build"
         mkdir -p "$FDIR"
         cd "$FDIR" || return 1
         if [ ! -d "ffmpeg" ]; then
-            git clone --depth 1 https://github.com/FFmpeg/FFmpeg.git ffmpeg || { log_error "Failed to clone ffmpeg repo"; cd ..; return 1; }
+            clone_exact_commit "https://github.com/FFmpeg/FFmpeg.git" "b6d737a49c3422ea81381851fa49ef750c9fd367" "ffmpeg" || { log_error "Failed to clone ffmpeg repo"; cd ..; return 1; }
         fi
         cd ffmpeg || { log_error "Failed to cd into ffmpeg"; cd ..; cd ..; return 1; }
         if [ ! -f "config.mak" ]; then
@@ -151,8 +150,9 @@ for target in [pathlib.Path.home() / ".config/vapoursynth/vapoursynth.toml", pat
         log_info "Compiling BestSource..."
         cd "$BASE_DIR/build_tmp" || return 1
         if [ -d "bestsource" ]; then rm -rf bestsource; fi
-        git clone --depth 1 --recurse-submodules https://github.com/vapoursynth/bestsource.git || { log_error "Failed to clone BestSource"; cd ..; return 1; }
+        clone_exact_commit "https://github.com/vapoursynth/bestsource.git" "9faf6750b3ac3519cf18987f34d4212a7a06ddea" "bestsource" || { log_error "Failed to clone BestSource"; cd ..; return 1; }
         cd bestsource || { log_error "Failed to cd into bestsource"; cd ..; cd ..; return 1; }
+        git submodule update --init --recursive || true
         
         # Patch BestSource for VapourSynth API 4.2 compatibility
         sed -i 's/clip:vnode:all;/clip:vnode;/g' src/vapoursynth.cpp

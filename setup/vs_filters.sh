@@ -69,7 +69,7 @@ install_vs_filters() {
     else
         mkdir -p build_tmp && cd build_tmp || return 1
         [ -d "akarin" ] && rm -rf "akarin"
-        if git clone --depth 1 "https://github.com/AkarinVS/vapoursynth-plugin.git" "akarin"; then
+        if clone_exact_commit "https://github.com/AkarinVS/vapoursynth-plugin.git" "8b7ff6dcc85bc9935789c799e63f1388dfbd1bd4" "akarin"; then
             cd akarin
             if meson setup build && ninja -C build; then
                 find build -name "*.so" -type f -exec vsf_install_so {} \;
@@ -82,10 +82,10 @@ install_vs_filters() {
         cd ..
     fi
 
-    # AWarp - meson
+    # AWarp (Pinned tag 3.1: 86d1d40) - meson
     mkdir -p build_tmp && cd build_tmp || return 1
     [ -d "VapourSynth-AWarp" ] && rm -rf "VapourSynth-AWarp"
-    if git clone --depth 1 "https://github.com/HolyWu/VapourSynth-AWarp.git" "VapourSynth-AWarp"; then
+    if clone_exact_commit "https://github.com/HolyWu/VapourSynth-AWarp.git" "86d1d4067b823f72511760499006df6c93015f44" "VapourSynth-AWarp"; then
         cd VapourSynth-AWarp
         if meson setup build && ninja -C build; then
             find build -name "*.so" -type f -exec vsf_install_so {} \;
@@ -110,10 +110,10 @@ install_vs_filters() {
     fi
     cd ..
 
-    # zsmooth - Zig build like vszip (build-help/build.sh fetches its own Zig)
+    # zsmooth (Pinned commit 187ae30) - Zig build like vszip (build-help/build.sh fetches its own Zig)
     mkdir -p build_tmp && cd build_tmp || return 1
     if [ -d "zsmooth" ]; then rm -rf zsmooth; fi
-    git clone --depth 1 https://github.com/adworacz/zsmooth.git || { log_warn "clone failed: zsmooth"; cd ..; }
+    clone_exact_commit "https://github.com/adworacz/zsmooth.git" "187ae3011979b8064baf46034a2771b7f018a1c6" "zsmooth" || { log_warn "clone failed: zsmooth"; cd ..; }
     if [ -d "zsmooth" ]; then
         cd zsmooth || { cd ..; }
         if [ -d "build-help" ]; then
@@ -132,10 +132,10 @@ install_vs_filters() {
     fi
     cd .. # exit build_tmp
 
-    # vs-placebo - meson, needs libplacebo-dev
+    # vs-placebo (Pinned tag 2.0.4: 3cfd23f) - meson, needs libplacebo-dev
     mkdir -p build_tmp && cd build_tmp || return 1
     if [ -d "vs-placebo" ]; then rm -rf vs-placebo; fi
-    git clone --depth 1 https://github.com/Lypheo/vs-placebo.git || log_warn "clone failed: vs-placebo"
+    clone_exact_commit "https://github.com/Lypheo/vs-placebo.git" "3cfd23f257ecb62b0cbd81eaaca092e18ae8e579" "vs-placebo" || log_warn "clone failed: vs-placebo"
     if [ -d "vs-placebo" ]; then
         cd vs-placebo || { cd ..; }
         export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH"

@@ -13,7 +13,7 @@ fi
 # Binaries land in <repo>/tools/vs-hip and <repo>/tools/FFVship/<variant>
 # mirroring the Windows portable layout the dispatchers expect.
 VSHIP_REPO="https://codeberg.org/Line-fr/Vship.git"
-VSHIP_TAG="v5.1.0"
+VSHIP_COMMIT="d5302054d22c139633986a76a4dbfcddc857126c" # v5.1.0
 
 vs_plugin_dirs() {
     pkg-config --variable=libdir vapoursynth 2>/dev/null | sed 's|$|/vapoursynth|'
@@ -29,9 +29,7 @@ install_ffvship() {
     cd build_tmp || exit 1
 
     if [ -d "Vship" ]; then rm -rf Vship; fi
-    git clone --branch "$VSHIP_TAG" --depth 1 "$VSHIP_REPO" \
-        || git clone --depth 1 "$VSHIP_REPO" \
-        || { log_error "Failed to clone Vship"; cd ..; return 1; }
+    clone_exact_commit "$VSHIP_REPO" "$VSHIP_COMMIT" "Vship" || { log_error "Failed to clone Vship"; cd ..; return 1; }
     cd Vship || { log_error "Failed to cd into Vship"; cd ..; cd ..; return 1; }
 
     local BUILT_ANY=0

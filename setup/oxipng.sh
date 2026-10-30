@@ -15,7 +15,7 @@ install_oxipng() {
             source "$HOME/.cargo/env"
             export PATH="$HOME/.cargo/bin:$PATH"
         fi
-        cargo install oxipng || { log_error "Failed to install oxipng via cargo"; return 1; }
+        cargo install --version 10.2.1 --locked oxipng || { log_error "Failed to install oxipng via cargo"; return 1; }
         
         if [ -f "$HOME/.cargo/bin/oxipng" ]; then
             cp "$HOME/.cargo/bin/oxipng" /usr/local/bin/oxipng

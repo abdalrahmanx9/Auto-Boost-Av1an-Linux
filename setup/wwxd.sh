@@ -17,9 +17,9 @@ install_wwxd() {
     mkdir -p build_tmp
     cd build_tmp || exit 1
 
-    log_info "Compiling VapourSynth-WWXD (API 4)..."
+    log_info "Compiling VapourSynth-WWXD (API 4, Pinned: 73c05a4)..."
     if [ -d "vapoursynth-wwxd" ]; then rm -rf vapoursynth-wwxd; fi
-    git clone --branch v1.0 --depth 1 https://github.com/dubhater/vapoursynth-wwxd.git || { log_error "Failed to clone WWXD"; cd ..; return 1; }
+    clone_exact_commit "https://github.com/dubhater/vapoursynth-wwxd.git" "73c05a4e8202ba935e1eb5ecc0471eb632f973ab" "vapoursynth-wwxd" || { log_error "Failed to clone WWXD"; cd ..; return 1; }
     cd vapoursynth-wwxd || { log_error "Failed to cd into vapoursynth-wwxd"; cd ..; cd ..; return 1; }
     
     # Check for VapourSynth headers

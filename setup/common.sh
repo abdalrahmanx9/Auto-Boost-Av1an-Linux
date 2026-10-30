@@ -55,6 +55,17 @@ check_distro() {
     fi
 }
 
+clone_exact_commit() {
+    local url="$1" commit="$2" dir="$3"
+    mkdir -p "$dir" && cd "$dir" || return 1
+    git init -q
+    git remote remove origin 2>/dev/null || true
+    git remote add origin "$url"
+    git fetch --depth 1 origin "$commit" || { git fetch origin "$commit"; } || return 1
+    git checkout -q FETCH_HEAD || return 1
+    cd - >/dev/null
+}
+
 ask_yes_no() {
     local prompt="$1"
     local default="$2" # Y or N

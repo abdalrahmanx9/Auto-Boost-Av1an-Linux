@@ -14,11 +14,11 @@ fi
 # 'custom' is never built: drop your own SvtAv1EncApp into
 #   tools/av1an/svt-av1 forks/custom/x86-64-v3/
 SVT_FISH_REPO="https://github.com/5fish/svt-av1-psy.git"
-SVT_FISH_TAG="main"
+SVT_FISH_REF="9252c01ee243c2c329cfcc6804d24bbdccf48434"
 SVT_ESSENTIAL_REPO="https://github.com/psy-ex/svt-av1-psy.git"
-SVT_ESSENTIAL_REF="master"
+SVT_ESSENTIAL_REF="8dcb7f8d6bff69bd73f663aac61849468f3a9d71"
 SVT_HDR_REPO="https://github.com/emrakyz/svt-av1-hdr.git"
-SVT_HDR_REF="main"
+SVT_HDR_REF="df788d61dca67c7117af05e52a24f7ee9b1f8178"
 
 # build_svt_fork <repo> <ref> <name> <extra cmake args...>
 build_svt_fork() {
@@ -32,12 +32,12 @@ build_svt_fork() {
         return 0
     fi
 
-    log_info "Building SVT-AV1 fork: $name ($ref)..."
+    log_info "Building SVT-AV1 fork: $name (Pinned: ${ref:0:7})..."
     mkdir -p build_tmp
     cd build_tmp || return 1
     local SRC="svt-$name"
     [ -d "$SRC" ] && rm -rf "$SRC"
-    git clone --branch "$ref" --depth 1 "$repo" "$SRC" || { log_error "Failed to clone $name"; cd ..; return 1; }
+    clone_exact_commit "$repo" "$ref" "$SRC" || { log_error "Failed to clone $name"; cd ..; return 1; }
     cd "$SRC" || { log_error "Failed to cd into $SRC"; cd ../..; return 1; }
 
     sed -i 's/\r$//' Source/App/CMakeLists.txt 2>/dev/null

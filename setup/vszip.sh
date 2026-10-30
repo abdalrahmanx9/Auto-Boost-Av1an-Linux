@@ -39,9 +39,9 @@ install_vszip() {
     mkdir -p build_tmp
     cd build_tmp || exit 1
     
-    log_info "Fallback: Compiling VSZIP from source..."
+    log_info "Fallback: Compiling VSZIP from source (Pinned: d11057c)..."
     if [ -d "vszip" ]; then rm -rf vszip; fi
-    git clone --depth 1 https://github.com/dnjulek/vapoursynth-zip.git vszip || { log_error "Failed to clone VSZIP"; cd ..; return 1; }
+    clone_exact_commit "https://github.com/dnjulek/vapoursynth-zip.git" "d11057c95442e6ca76c10128a9ddac4db2973aa0" "vszip" || { log_error "Failed to clone VSZIP"; cd ..; return 1; }
     cd vszip || { log_error "Failed to cd into vszip"; cd ..; cd ..; return 1; }
     
     if command -v zig &> /dev/null; then

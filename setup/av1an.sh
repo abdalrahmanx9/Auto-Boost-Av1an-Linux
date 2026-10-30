@@ -22,16 +22,16 @@ install_av1an() {
         export PATH="$HOME/.cargo/bin:$PATH"
     fi
 
-    # 2. Av1an
+    # 2. Av1an (Pinned to v0.6.0 commit 641ce62)
     if ! command -v av1an &> /dev/null; then
-        log_info "Installing Av1an via Cargo (Git Source)..."
+        log_info "Installing Av1an via Cargo (Pinned: 641ce62)..."
         source "$HOME/.cargo/env"
         
         export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH"
         export LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH"
         export LIBRARY_PATH="/usr/local/lib:$LIBRARY_PATH"
 
-        cargo install --git https://github.com/rust-av/Av1an.git --bin av1an || { log_error "Failed to install Av1an via cargo"; return 1; }
+        cargo install --git https://github.com/rust-av/Av1an.git --rev 641ce62d70e34f438f3ee91ec50de77784a10705 --bin av1an || { log_error "Failed to install Av1an via cargo"; return 1; }
         
         if [ -f "$HOME/.cargo/bin/av1an" ]; then
             cp "$HOME/.cargo/bin/av1an" /usr/local/bin/av1an
