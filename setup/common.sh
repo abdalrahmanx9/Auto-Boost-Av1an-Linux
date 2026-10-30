@@ -70,6 +70,11 @@ ask_yes_no() {
     local prompt="$1"
     local default="$2" # Y or N
     
+    # If non-interactive (e.g. piped or automated script), return default immediately
+    if [ ! -t 0 ]; then
+        if [ "$default" == "Y" ]; then return 0; else return 1; fi
+    fi
+    
     local yn_prompt="[y/n]"
     if [ "$default" == "Y" ]; then yn_prompt="[Y/n]"; fi
     if [ "$default" == "N" ]; then yn_prompt="[y/N]"; fi

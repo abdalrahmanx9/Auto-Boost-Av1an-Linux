@@ -150,6 +150,9 @@ install_tool() {
     
     if [ ${#install_queue[@]} -eq 0 ]; then
         log_success "All dependencies for $target_tool are already installed."
+        if [ "$FORCE_YES" == "1" ]; then
+            return 0
+        fi
         if ! ask_yes_no "Re-install/Update $target_tool anyway?" "N"; then
             return 0
         fi
@@ -158,9 +161,11 @@ install_tool() {
 
     echo ""
     log_info "The following will be installed: ${install_queue[*]}"
-    if ! ask_yes_no "Proceed?" "Y"; then
-        log_warn "Installation cancelled."
-        return 0
+    if [ "$FORCE_YES" != "1" ]; then
+        if ! ask_yes_no "Proceed?" "Y"; then
+            log_warn "Installation cancelled."
+            return 0
+        fi
     fi
     
     for item in "${install_queue[@]}"; do
@@ -196,8 +201,10 @@ uninstall_tool() {
     local target_tool=$1
     echo ""
     log_warn "You are about to UNINSTALL: $target_tool"
-    if ! ask_yes_no "Are you sure?" "N"; then
-         return 0
+    if [ "$FORCE_YES" != "1" ]; then
+        if ! ask_yes_no "Are you sure?" "N"; then
+            return 0
+        fi
     fi
     
     case "$target_tool" in
@@ -364,15 +371,20 @@ if [ "$1" == "--status" ]; then
     echo "=========================================================="
     exit 0
 elif [ "$1" == "--install" ] && [ -n "$2" ]; then
-    if [[ "$2" =~ ^[Aa]$ ]]; then
+    if [ "$3" == "-y" ] || [ "$3" == "--yes" ]; then
+        export FORCE_YES=1
+    fi
+    if [[ "$2" =~ ^[Aa]$ || "$2" == "all" ]]; then
         install_all_tools
     else
         install_tool "$2"
     fi
 elif [ "$1" == "--uninstall" ] && [ -n "$2" ]; then
-    if [[ "$2" =~ ^[Aa]$ ]]; then
-        # For CLI, we might want to ask confirmation or force if -y is passed, but for now reuse simple logic
-        if ask_yes_no "Are you sure you want to uninstall EVERYTHING?" "N"; then
+    if [ "$3" == "-y" ] || [ "$3" == "--yes" ]; then
+        export FORCE_YES=1
+    fi
+    if [[ "$2" =~ ^[Aa]$ || "$2" == "all" ]]; then
+        if [ "$FORCE_YES" == "1" ] || ask_yes_no "Are you sure you want to uninstall EVERYTHING?" "N"; then
             uninstall_all_tools
         fi
     else
