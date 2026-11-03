@@ -86,20 +86,22 @@ install_ffvship() {
     make install PREFIX=/usr/local 2>/dev/null || log_warn "System-wide Vship install skipped."
 
     # Activate one libvship in the VapourSynth autoload path (prefer NVIDIA > AMD > Vulkan)
-    local AUTOLOAD_DIR BEST=""
-    for d in $(vs_plugin_dirs); do
-        if [ -d "$d" ]; then AUTOLOAD_DIR="$d"; break; fi
-    done
+    local BEST=""
     for cand in libvship_NVIDIA.so libvship_AMD.so libvship_VULKAN.so; do
         if [ -f "$REPO_ROOT/tools/vs-hip/$cand" ]; then BEST="$cand"; break; fi
     done
-    if [ -n "$AUTOLOAD_DIR" ] && [ -n "$BEST" ]; then
-        mkdir -p "$AUTOLOAD_DIR"
-        # Only one libvship may live in the autoload dir at a time
-        rm -f "$AUTOLOAD_DIR"/libvship_*.so
-        cp -v "$REPO_ROOT/tools/vs-hip/$BEST" "$AUTOLOAD_DIR/libvship.so"
-        ldconfig
-        log_info "Activated $BEST as $AUTOLOAD_DIR/libvship.so"
+    if [ -n "$BEST" ]; then
+        uninstall_vs_plugin "libvship_*.so"
+        uninstall_vs_plugin "libvship.so"
+        install_vs_plugin "$REPO_ROOT/tools/vs-hip/$BEST"
+        # Also ensure it is named libvship.so
+        local vs_py
+        vs_py="$(get_vs_py_dir)"
+        cp -f "$REPO_ROOT/tools/vs-hip/$BEST" /usr/lib/vapoursynth/libvship.so
+        ln -sf /usr/lib/vapoursynth/libvship.so /usr/local/lib/vapoursynth/libvship.so 2>/dev/null || true
+        [ -n "$vs_py" ] && ln -sf /usr/lib/vapoursynth/libvship.so "$vs_py/plugins/libvship.so" 2>/dev/null || true
+        ldconfig 2>/dev/null || true
+        log_info "Activated $BEST as libvship.so"
     fi
 
     cd ../.. # Exit build_tmp
@@ -109,10 +111,11 @@ install_ffvship() {
 uninstall_ffvship() {
     log_info "Uninstalling FFVship..."
     rm -vf /usr/local/bin/FFVship
-    for d in $(vs_plugin_dirs); do rm -vf "$d/libvship.so" "$d"/libvship_*.so 2>/dev/null; done
+    uninstall_vs_plugin "libvship.so"
+    uninstall_vs_plugin "libvship_*.so"
     local REPO_ROOT
     REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     rm -rf "$REPO_ROOT/tools/vs-hip" "$REPO_ROOT/tools/FFVship"
-    ldconfig
+    ldconfig 2>/dev/null || true
     log_success "FFVship uninstalled."
 }

@@ -23,6 +23,10 @@ CACHYOS_PACMAN_PACKAGES=(
     git
 
     # Build toolchain
+    base-devel
+    gcc
+    make
+    patch
     cmake
     pkgconf
     autoconf
@@ -42,6 +46,7 @@ CACHYOS_PACMAN_PACKAGES=(
     python-numpy
     python-psutil
     python-rich
+    python-typing_extensions
     python-pyperclip
     python-requests
     python-natsort
@@ -87,7 +92,7 @@ install_cachyos_deps() {
 
     # Python packages that may not be in official Arch repos
     log_info "Installing required Python libraries via pip..."
-    pip3 install --break-system-packages "vsjetpack==2.2.2" vstools anitopy wakepy Cython matplotlib || {
+    pip3 install --break-system-packages --no-deps "vsjetpack==2.2.2" vstools jetpytools anitopy wakepy Cython matplotlib || {
         log_error "Failed to install Python libraries via pip."
         return 1
     }
@@ -101,6 +106,9 @@ install_cachyos_deps() {
             log_warn "AUR helper install had warnings — built-in source builders remain available."
         }
     fi
+
+    # Ensure VapourSynth include headers and decoder symlinks are configured
+    setup_vs_links
 
     log_success "Arch/CachyOS system dependencies installed."
 }

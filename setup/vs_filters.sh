@@ -12,22 +12,10 @@ fi
 #   dfttest   - DFTTest denoise (vsdenoise wrapper)
 #   vs-placebo- libplacebo Deband/Resample/Tonemap
 # Every plugin is optional: a failure is logged and the rest continue.
-vsf_plugin_dirs() {
-    pkg-config --variable=libdir vapoursynth 2>/dev/null | sed 's|$|/vapoursynth|'
-    echo "/usr/local/lib/vapoursynth"
-    echo "/usr/lib/x86_64-linux-gnu/vapoursynth"
-    echo "/usr/lib/vapoursynth"
-}
-
 vsf_install_so() {
     local so="$1"
-    for d in $(vsf_plugin_dirs); do
-        if [ -d "$d" ]; then
-            mkdir -p "$d"
-            cp -v "$so" "$d/$(basename "$so")"
-        fi
-    done
-    ldconfig
+    install_vs_plugin "$so"
+    ldconfig 2>/dev/null || true
 }
 
 # build_cmake_plugin <name> <repo> [extra cmake args]
@@ -174,11 +162,12 @@ install_vs_filters() {
 
 uninstall_vs_filters() {
     log_info "Uninstalling VapourSynth filter plugins..."
-    for d in $(vsf_plugin_dirs); do
-        [ -d "$d" ] || continue
-        rm -vf "$d/libakarin.so" "$d/libawarp.so" "$d/libdfttest.so" \
-               "$d/libzsmooth.so" "$d/libvsplacebo.so" "$d/vs_placebo.so" 2>/dev/null
-    done
-    ldconfig
+    uninstall_vs_plugin "libakarin.so"
+    uninstall_vs_plugin "libawarp.so"
+    uninstall_vs_plugin "libdfttest.so"
+    uninstall_vs_plugin "libzsmooth.so"
+    uninstall_vs_plugin "libvsplacebo.so"
+    uninstall_vs_plugin "vs_placebo.so"
+    ldconfig 2>/dev/null || true
     log_success "Filter plugins uninstalled."
 }

@@ -2,7 +2,30 @@
 
 All notable changes to the Linux Port of Auto-Boost-Av1an will be documented in this file.
 
-## [3.0.1-linux] - 2026-10-30
+## [3.0.2-linux] - 2026-11-03
+
+Arch Linux and CachyOS VapourSynth R81+ compatibility fixes and plugin installer hardening.
+
+### Fixed
+- **VapourSynth R81 Header Resolution (CachyOS/Arch)**:
+  - Arch and CachyOS install VapourSynth headers into Python site-packages (`$VS_PY_DIR/include/`) rather than `/usr/include/vapoursynth`. Added automatic discovery (`get_vs_include_dir`) and symlinks (`/usr/include/vapoursynth`, `/usr/local/include/vapoursynth`).
+  - Added backward-compatibility symlinks (`VSHelper.h -> VSHelper4.h`, `VapourSynth.h -> VapourSynth4.h`, `VSConstants.h -> VSConstants4.h`, `VSScript.h -> VSScript4.h`) resolving the fatal compile error `VSHelper.h: No such file or directory` when building WWXD.
+- **WWXD Compilation & Autoload**:
+  - Patched `src/detection.c` in `setup/wwxd.sh` to include `<VSHelper4.h>`.
+  - Ensured `setup_vs_links` runs automatically before building WWXD.
+- **VapourSynth Decoder Cross-Linking**:
+  - Cross-symlinked `libffms2.so` and `libbestsource.so` into `$VS_PY_DIR/plugins/`, `/usr/lib/vapoursynth/`, and `/usr/local/lib/vapoursynth/` so both decoders autoload natively in `vs.core`.
+- **Status Detection False Negatives**:
+  - Updated `is_installed` in `setup.sh` for `vapoursynth`, `wwxd`, `vszip`, `subtext`, `vs_filters`, and `mlrt` to dynamically verify both library paths and Python runtime attributes, eliminating false `[MISSING]` status reports when pacman packages are installed.
+- **Pip vs Pacman Conflict Prevention**:
+  - Prevented `pip3 uninstall -y vapoursynth` in `setup/python_libs.sh` from deleting Arch/CachyOS pacman-managed files.
+  - Used `--no-deps` for `vsjetpack` and installed `jetpytools` + `python-typing_extensions` natively to prevent pip from downloading conflicting PyPI wheels over pacman packages.
+  - Added `--overwrite '*'` on pacman reinstallation to repair any system packages corrupted by prior pip runs.
+
+### Changed
+- **Universal Plugin Deployment**:
+  - Added `install_vs_plugin` and `uninstall_vs_plugin` in `setup/common.sh`, replacing fragile `$(pkg-config --variable=libdir vapoursynth)` calls that resolved to `/vapoursynth` on Arch/CachyOS.
+  - Migrated `setup/wwxd.sh`, `setup/vszip.sh`, `setup/subtext.sh`, `setup/vs_filters.sh`, `setup/ffvship.sh`, and `setup/mlrt.sh` to the unified installer.
 
 Native Arch Linux and CachyOS support and tools polish.
 

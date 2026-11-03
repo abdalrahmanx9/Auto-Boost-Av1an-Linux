@@ -93,3 +93,118 @@ ask_yes_no() {
         return 1
     fi
 }
+
+get_vs_py_dir() {
+    local py_dir
+    py_dir="$(python3 -c 'import vapoursynth, os; print(os.path.dirname(vapoursynth.__file__))' 2>/dev/null)"
+    if [ -z "$py_dir" ]; then
+        py_dir="$(find /usr/lib*/python3* /usr/local/lib*/python3* -type d -name vapoursynth 2>/dev/null | head -n 1)"
+    fi
+    echo "$py_dir"
+}
+
+get_vs_include_dir() {
+    local vs_py
+    vs_py="$(get_vs_py_dir)"
+    if [ -d "/usr/include/vapoursynth" ] && ([ -f "/usr/include/vapoursynth/VapourSynth4.h" ] || [ -f "/usr/include/vapoursynth/VapourSynth.h" ]); then
+        echo "/usr/include/vapoursynth"
+        return 0
+    fi
+    if [ -n "$vs_py" ] && [ -d "$vs_py/include" ] && ([ -f "$vs_py/include/VapourSynth4.h" ] || [ -f "$vs_py/include/VapourSynth.h" ]); then
+        echo "$vs_py/include"
+        return 0
+    fi
+    if [ -d "/usr/local/include/vapoursynth" ] && ([ -f "/usr/local/include/vapoursynth/VapourSynth4.h" ] || [ -f "/usr/local/include/vapoursynth/VapourSynth.h" ]); then
+        echo "/usr/local/include/vapoursynth"
+        return 0
+    fi
+    if [ -n "$vs_py" ] && [ -d "$vs_py/include" ]; then
+        echo "$vs_py/include"
+        return 0
+    fi
+    echo "/usr/local/include/vapoursynth"
+}
+
+setup_vs_links() {
+    local VS_PY_DIR
+    VS_PY_DIR="$(get_vs_py_dir)"
+    if [ -n "$VS_PY_DIR" ] && [ -d "$VS_PY_DIR/include" ]; then
+        mkdir -p /usr/include /usr/local/include
+        ln -sfn "$VS_PY_DIR/include" /usr/include/vapoursynth 2>/dev/null || true
+        ln -sfn "$VS_PY_DIR/include" /usr/local/include/vapoursynth 2>/dev/null || true
+        ln -sf VSHelper4.h "$VS_PY_DIR/include/VSHelper.h" 2>/dev/null || true
+        ln -sf VapourSynth4.h "$VS_PY_DIR/include/VapourSynth.h" 2>/dev/null || true
+        ln -sf VSConstants4.h "$VS_PY_DIR/include/VSConstants.h" 2>/dev/null || true
+        ln -sf VSScript4.h "$VS_PY_DIR/include/VSScript.h" 2>/dev/null || true
+    fi
+
+    mkdir -p /usr/lib/vapoursynth /usr/local/lib/vapoursynth
+    if [ -n "$VS_PY_DIR" ]; then
+        mkdir -p "$VS_PY_DIR/plugins"
+    fi
+
+    # Cross-link ffms2
+    for cand in /usr/lib/vapoursynth/libffms2.so /usr/lib/libffms2.so* /usr/local/lib/libffms2.so*; do
+        if [ -f "$cand" ]; then
+            local real_ffms2
+            real_ffms2="$(realpath "$cand")"
+            if [ -f "$real_ffms2" ]; then
+                [ -n "$VS_PY_DIR" ] && ln -sf "$real_ffms2" "$VS_PY_DIR/plugins/libffms2.so" 2>/dev/null || true
+                ln -sf "$real_ffms2" /usr/lib/vapoursynth/libffms2.so 2>/dev/null || true
+                ln -sf "$real_ffms2" /usr/local/lib/vapoursynth/libffms2.so 2>/dev/null || true
+                break
+            fi
+        fi
+    done
+
+    # Cross-link bestsource
+    local bs_cand
+    bs_cand="$(find /usr/lib /usr/local/lib -name 'libbestsource.so' 2>/dev/null | head -n 1)"
+    if [ -n "$bs_cand" ] && [ -f "$bs_cand" ]; then
+        local real_bs
+        real_bs="$(realpath "$bs_cand")"
+        if [ -f "$real_bs" ]; then
+            [ -n "$VS_PY_DIR" ] && ln -sf "$real_bs" "$VS_PY_DIR/plugins/libbestsource.so" 2>/dev/null || true
+            ln -sf "$real_bs" /usr/lib/vapoursynth/libbestsource.so 2>/dev/null || true
+            ln -sf "$real_bs" /usr/local/lib/vapoursynth/libbestsource.so 2>/dev/null || true
+        fi
+    fi
+
+    ldconfig 2>/dev/null || true
+}
+
+install_vs_plugin() {
+    local src="$1"
+    [ -f "$src" ] || return 1
+    local name
+    name="$(basename "$src")"
+    local vs_py
+    vs_py="$(get_vs_py_dir)"
+
+    mkdir -p "/usr/lib/vapoursynth" "/usr/local/lib/vapoursynth"
+    if [ -d "/usr/lib/x86_64-linux-gnu" ]; then
+        mkdir -p "/usr/lib/x86_64-linux-gnu/vapoursynth"
+    fi
+
+    cp -f "$src" "/usr/lib/vapoursynth/$name"
+    ln -sf "/usr/lib/vapoursynth/$name" "/usr/local/lib/vapoursynth/$name" 2>/dev/null || cp -f "$src" "/usr/local/lib/vapoursynth/$name"
+    if [ -d "/usr/lib/x86_64-linux-gnu/vapoursynth" ]; then
+        ln -sf "/usr/lib/vapoursynth/$name" "/usr/lib/x86_64-linux-gnu/vapoursynth/$name" 2>/dev/null || true
+    fi
+    if [ -n "$vs_py" ]; then
+        mkdir -p "$vs_py/plugins"
+        ln -sf "/usr/lib/vapoursynth/$name" "$vs_py/plugins/$name" 2>/dev/null || cp -f "$src" "$vs_py/plugins/$name"
+    fi
+    ldconfig 2>/dev/null || true
+}
+
+uninstall_vs_plugin() {
+    local name="$1"
+    local vs_py
+    vs_py="$(get_vs_py_dir)"
+    rm -vf "/usr/lib/vapoursynth/$name" "/usr/local/lib/vapoursynth/$name" "/usr/lib/x86_64-linux-gnu/vapoursynth/$name" 2>/dev/null || true
+    if [ -n "$vs_py" ] && [ -d "$vs_py/plugins" ]; then
+        rm -vf "$vs_py/plugins/$name" 2>/dev/null || true
+    fi
+    ldconfig 2>/dev/null || true
+}

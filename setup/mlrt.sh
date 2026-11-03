@@ -58,14 +58,11 @@ install_mlrt() {
             cp -v "$lib" "/usr/local/lib/$(basename "$lib")"
         done
         # Deploy plugin shared objects into vapoursynth plugin dirs
-        for d in $(vsmlrt_plugin_dirs); do
-            [ -d "$d" ] || continue
-            find vsmlrt -name "vsncnn.so" -o -name "vsov.so" -o -name "libvsort.so" -o -name "libvstrt.so" -o -name "libvsmigx.so" | while read -r so; do
-                cp -v "$so" "$d/$(basename "$so")"
-            done
+        find vsmlrt -name "vsncnn.so" -o -name "vsov.so" -o -name "libvsort.so" -o -name "libvstrt.so" -o -name "libvsmigx.so" | while read -r so; do
+            install_vs_plugin "$so"
         done
     fi
-    ldconfig
+    ldconfig 2>/dev/null || true
 
     # ArtCNN models go through vsscale's own downloader at first use; keep a cache dir
     mkdir -p "$REPO_ROOT/.vsjet"
@@ -75,11 +72,13 @@ install_mlrt() {
 
 uninstall_mlrt() {
     log_info "Uninstalling vs-mlrt..."
-    for d in $(vsmlrt_plugin_dirs); do
-        [ -d "$d" ] || continue
-        rm -vf "$d/vsncnn.so" "$d/vsov.so" "$d/libvstrt.so" "$d/libvsort.so" "$d/libvsmigx.so" "$d/libvs_onnxruntime.so" 2>/dev/null
-    done
+    uninstall_vs_plugin "vsncnn.so"
+    uninstall_vs_plugin "vsov.so"
+    uninstall_vs_plugin "libvstrt.so"
+    uninstall_vs_plugin "libvsort.so"
+    uninstall_vs_plugin "libvsmigx.so"
+    uninstall_vs_plugin "libvs_onnxruntime.so"
     rm -vf /usr/local/lib/libopenvino*.so* /usr/local/lib/libtbb*.so* /usr/local/lib/libhwloc*.so* 2>/dev/null
-    ldconfig
+    ldconfig 2>/dev/null || true
     log_success "vs-mlrt uninstalled."
 }

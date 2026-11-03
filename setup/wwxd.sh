@@ -6,14 +6,6 @@ if [ -z "$COMMON_SOURCED" ]; then
 fi
 
 install_wwxd() {
-    local VS_PLUGIN_PATH=""
-    if command -v pkg-config &> /dev/null; then
-        VS_PLUGIN_PATH=$(pkg-config --variable=libdir vapoursynth)/vapoursynth
-    else
-        VS_PLUGIN_PATH="/usr/local/lib/vapoursynth"
-    fi
-    mkdir -p "$VS_PLUGIN_PATH"
-
     mkdir -p build_tmp
     cd build_tmp || exit 1
 
@@ -22,16 +14,21 @@ install_wwxd() {
     clone_exact_commit "https://github.com/dubhater/vapoursynth-wwxd.git" "73c05a4e8202ba935e1eb5ecc0471eb632f973ab" "vapoursynth-wwxd" || { log_error "Failed to clone WWXD"; cd ..; return 1; }
     cd vapoursynth-wwxd || { log_error "Failed to cd into vapoursynth-wwxd"; cd ..; cd ..; return 1; }
     
-    # Check for VapourSynth headers (source installs put them in /usr/local,
-    # distro packages such as Arch/CachyOS put them in /usr)
-    local VS_INCLUDE=""
-    if [ -d "/usr/local/include/vapoursynth" ]; then
-        VS_INCLUDE="/usr/local/include/vapoursynth"
-    elif [ -d "/usr/include/vapoursynth" ]; then
-        VS_INCLUDE="/usr/include/vapoursynth"
-    else
-        log_error "VapourSynth headers not found. Please install VapourSynth first."
-        exit 1
+    # Ensure headers and links are configured
+    setup_vs_links
+
+    # Check for VapourSynth headers
+    local VS_INCLUDE
+    VS_INCLUDE="$(get_vs_include_dir)"
+    if [ ! -d "$VS_INCLUDE" ] || ([ ! -f "$VS_INCLUDE/VapourSynth4.h" ] && [ ! -f "$VS_INCLUDE/VapourSynth.h" ]); then
+        log_error "VapourSynth headers not found at $VS_INCLUDE. Please install VapourSynth first."
+        cd ..; cd ..; return 1
+    fi
+
+    # Fix VSHelper4.h include for API 4
+    sed -i 's/<VSHelper.h>/<VSHelper4.h>/g' src/detection.c 2>/dev/null || true
+    if [ -f "$VS_INCLUDE/VSHelper4.h" ] && [ ! -f "$VS_INCLUDE/VSHelper.h" ]; then
+        ln -sf VSHelper4.h "$VS_INCLUDE/VSHelper.h" 2>/dev/null || true
     fi
 
     # Modernize wwxd.c for VapourSynth API 4
@@ -179,14 +176,7 @@ EOF
     gcc -o libwwxd.so -fPIC -shared -O3 -Wall -Wextra -I. -I"$VS_INCLUDE" src/*.c -lm || \
         { log_error "Compilation failed"; cd ..; cd ..; return 1; }
     
-    cp -v libwwxd.so "$VS_PLUGIN_PATH/" || { log_error "Failed to copy libwwxd.so"; cd ..; cd ..; return 1; }
-    
-    if [ -d "/usr/lib/x86_64-linux-gnu/vapoursynth" ]; then
-        cp -v libwwxd.so "/usr/lib/x86_64-linux-gnu/vapoursynth/"
-    fi
-    if [ -d "/usr/lib/vapoursynth" ]; then
-        cp -v libwwxd.so "/usr/lib/vapoursynth/"
-    fi
+    install_vs_plugin libwwxd.so
     cd ..
     cd .. # Exit build_tmp
     
@@ -195,8 +185,6 @@ EOF
 
 uninstall_wwxd() {
     log_info "Uninstalling WWXD..."
-    find /usr/local/lib/vapoursynth -name "libwwxd.so" -delete 2>/dev/null || true
-    find /usr/lib/x86_64-linux-gnu/vapoursynth -name "libwwxd.so" -delete 2>/dev/null || true
-    find /usr/lib/vapoursynth -name "libwwxd.so" -delete 2>/dev/null || true
+    uninstall_vs_plugin "libwwxd.so"
     log_success "WWXD uninstalled."
 }

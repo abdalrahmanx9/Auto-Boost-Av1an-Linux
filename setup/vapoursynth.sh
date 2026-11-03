@@ -48,17 +48,24 @@ for target in [pathlib.Path.home() / ".config/vapoursynth/vapoursynth.toml", pat
 
     # On Arch/CachyOS, VapourSynth + FFMS2 + BestSource exist in official repos
     if command -v pacman &> /dev/null; then
-        if ! command -v vspipe &> /dev/null; then
-            log_info "Installing VapourSynth, FFMS2 and BestSource via pacman..."
-            pacman -S --needed --noconfirm vapoursynth ffms2 vapoursynth-plugin-bestsource || {
-                log_error "Failed to install VapourSynth packages via pacman."
-                return 1
+        if ! command -v vspipe &> /dev/null || ! python3 -c "import vapoursynth" &>/dev/null; then
+            log_info "Installing / repairing VapourSynth, FFMS2 and BestSource via pacman..."
+            pacman -S --needed --noconfirm --overwrite '*' vapoursynth ffms2 vapoursynth-plugin-bestsource || {
+                # If --needed skipped or files were missing/overwritten by pip, force reinstall
+                pacman -S --noconfirm --overwrite '*' vapoursynth ffms2 vapoursynth-plugin-bestsource || {
+                    log_error "Failed to install VapourSynth packages via pacman."
+                    return 1
+                }
             }
         else
             log_info "VapourSynth core is already installed."
         fi
+
+        # Setup include headers, compatibility symlinks, and cross-link decoders
+        setup_vs_links
+
         configure_vs_toml
-        mkdir -p /usr/local/lib/vapoursynth /usr/lib/vapoursynth
+        ldconfig 2>/dev/null || true
         log_success "VapourSynth, FFMS2, and BestSource installed from official repositories."
         return 0
     fi

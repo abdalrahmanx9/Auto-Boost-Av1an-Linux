@@ -59,8 +59,10 @@ is_installed() {
             ;;
         "vapoursynth")
             command -v vspipe &> /dev/null && \
-            ([ -f "/usr/local/lib/vapoursynth/libffms2.so" ] || [ -f "/usr/lib/vapoursynth/libffms2.so" ] || [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libffms2.so" ] || [ -f "/usr/lib/libffms2.so" ]) && \
-            ([ -f "/usr/local/lib/vapoursynth/libbestsource.so" ] || [ -f "/usr/lib/vapoursynth/libbestsource.so" ] || [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libbestsource.so" ])
+            ((find /usr/lib /usr/local/lib -name "libffms2.so*" 2>/dev/null | grep -q .) || \
+             python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'ffms2')" &>/dev/null) && \
+            ((find /usr/lib /usr/local/lib -name "libbestsource.so*" 2>/dev/null | grep -q .) || \
+             python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'bs') or hasattr(vs.core, 'bestsource')" &>/dev/null)
             ;;
         "av1an")
             command -v av1an &> /dev/null
@@ -75,37 +77,24 @@ is_installed() {
             command -v oxipng &> /dev/null
             ;;
         "wwxd")
-            [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libwwxd.so" ] || \
-            [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libwwxd.so" ] || \
-            [ -f "/usr/lib/vapoursynth/libwwxd.so" ] || \
-            [ -f "/usr/local/lib/vapoursynth/libwwxd.so" ]
+            (find /usr/lib /usr/local/lib -name "libwwxd.so" 2>/dev/null | grep -q .) || \
+            python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'wwxd')" &>/dev/null
             ;;
         "vszip")
-            [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libvszip.so" ] || \
-            [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libvszip.so" ] || \
-            [ -f "/usr/lib/vapoursynth/libvszip.so" ] || \
-            [ -f "/usr/local/lib/vapoursynth/libvszip.so" ]
+            (find /usr/lib /usr/local/lib -name "libvszip.so" 2>/dev/null | grep -q .) || \
+            python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'vszip')" &>/dev/null
             ;;
         "subtext")
-            [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libsubtext.so" ] || \
-            [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libsubtext.so" ] || \
-            [ -f "/usr/lib/vapoursynth/libsubtext.so" ] || \
-            [ -f "/usr/local/lib/vapoursynth/libsubtext.so" ]
+            (find /usr/lib /usr/local/lib -name "libsubtext.so" 2>/dev/null | grep -q .) || \
+            python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'subtext')" &>/dev/null
             ;;
         "vs_filters")
-            [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libakarin.so" ] || \
-            [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libakarin.so" ] || \
-            [ -f "/usr/lib/vapoursynth/libakarin.so" ] || \
-            [ -f "/usr/local/lib/vapoursynth/libakarin.so" ]
+            (find /usr/lib /usr/local/lib -name "libakarin.so" 2>/dev/null | grep -q .) || \
+            python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'akarin')" &>/dev/null
             ;;
         "mlrt")
-            [ -f "$(pkg-config --variable=libdir vapoursynth 2>/dev/null)/vapoursynth/libvstrt.so" ] || \
-            [ -f "/usr/lib/x86_64-linux-gnu/vapoursynth/libvstrt.so" ] || \
-            [ -f "/usr/lib/vapoursynth/libvstrt.so" ] || \
-            [ -f "/usr/local/lib/vapoursynth/libvsort.so" ] || \
-            [ -f "/usr/local/lib/vapoursynth/libvsmigx.so" ] || \
-            [ -f "/usr/local/lib/vapoursynth/vsncnn.so" ] || \
-            [ -f "/usr/local/lib/vapoursynth/vsov.so" ]
+            (find /usr/lib /usr/local/lib -name "libvstrt.so" -o -name "libvsort.so" -o -name "vsncnn.so" -o -name "vsov.so" 2>/dev/null | grep -q .) || \
+            python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'trt') or hasattr(vs.core, 'ncnn') or hasattr(vs.core, 'ov')" &>/dev/null
             ;;
         "tq_encoders")
             [ -x "$(dirname "$(realpath "$0")")/tools/av1an/condor" ] || \
