@@ -4,7 +4,7 @@ All notable changes to the Linux Port of Auto-Boost-Av1an will be documented in 
 
 ## [3.0.3-linux] - 2026-11-05
 
-Fedora and Nobara Linux support, multilib 64-bit path resolution, and CachyOS header/autoload hardening.
+Fedora and Nobara Linux support, multilib 64-bit path resolution, and repository cleanup.
 
 ### Added
 - **Fedora & Nobara Native Support**:
@@ -14,14 +14,13 @@ Fedora and Nobara Linux support, multilib 64-bit path resolution, and CachyOS he
   - Added distro detection in `setup/common.sh` (`check_distro`) and system deps dispatch in `setup.sh`.
 
 ### Fixed
-- **CachyOS / Arch Header & Plugin Hardening**:
-  - Ensured `VSHelper4.h -> VSHelper.h`, `VapourSynth4.h -> VapourSynth.h`, `VSConstants4.h -> VSConstants.h`, and `VSScript4.h -> VSScript.h` symlinks are created in all candidate include directories (`/usr/include/vapoursynth`, `/usr/local/include/vapoursynth`, and `$VS_PY_DIR/include`), eliminating the `fatal error: VSHelper.h: No such file or directory` error.
-  - Linked `$VS_PY_DIR/include` to system include directories so build systems checking `vapoursynth.get_include()` (such as BestSource) locate headers properly.
-  - Resolved `dubious ownership` git issues when building in containers or across user boundaries.
 - **Multilib 64-bit Architecture Paths (`/usr/lib64/`)**:
   - Added `/usr/lib64/vapoursynth` and `/usr/local/lib64/vapoursynth` support across `setup/common.sh`, `setup/vapoursynth.sh`, `setup/mlrt.sh`, `setup/ffvship.sh`, and `setup.sh`.
   - Enhanced `vapoursynth.toml` generator with integer timestamps and all 64-bit library search paths so `vspipe` operates natively without `Failed to initialize VSScript` errors.
-  - Patched BestSource API 4 compilation for Fedora/Nobara builds.
+- **BestSource API 4 Compatibility**:
+  - Automatically patched `createVideoFilterEx2` to `createVideoFilter2` for VapourSynth API 4 builds.
+- **Git Container & Multi-User Build Safety**:
+  - Added automatic `safe.directory` configuration to prevent `fatal: detected dubious ownership` failures when building in containers or across user boundaries.
 
 ### Removed
 - **Legacy Wrapper Scripts**: Removed deprecated `install_deps_ubuntu.sh` and `cleanup_install.sh` shims; full installation and uninstallation are handled uniformly across all distributions by `setup.sh`.
