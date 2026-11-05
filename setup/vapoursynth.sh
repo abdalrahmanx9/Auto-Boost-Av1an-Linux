@@ -8,7 +8,7 @@ fi
 install_vapoursynth() {
     local VS_PLUGIN_PATH="/usr/local/lib/vapoursynth"
     mkdir -p "$VS_PLUGIN_PATH"
-    mkdir -p build_tmp
+    mkdir -p "$BUILD_TMP"
 
     # Configure VapourSynth runtime paths (vapoursynth.toml)
     configure_vs_toml() {
@@ -101,7 +101,7 @@ for target in [pathlib.Path.home() / ".config/vapoursynth/vapoursynth.toml", pat
         if ! python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'bs') or hasattr(vs.core, 'bestsource')" &>/dev/null && \
            ! find /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 -name "libbestsource.so*" 2>/dev/null | grep -q .; then
             log_info "Compiling BestSource for Fedora/Nobara..."
-            cd "$BASE_DIR/build_tmp" || mkdir -p "$BASE_DIR/build_tmp" && cd "$BASE_DIR/build_tmp"
+            mkdir -p "$BUILD_TMP" && cd "$BUILD_TMP" || return 1
             if [ -d "bestsource" ]; then rm -rf bestsource; fi
             clone_exact_commit "https://github.com/vapoursynth/bestsource.git" "9faf6750b3ac3519cf18987f34d4212a7a06ddea" "bestsource" || { log_error "Failed to clone BestSource"; return 1; }
             cd bestsource || return 1
@@ -141,17 +141,17 @@ with open(path, "w") as f:
 
     if ! command -v vspipe &> /dev/null; then
         log_info "Compiling VapourSynth from Source..."
-        cd build_tmp || exit 1
+        mkdir -p "$BUILD_TMP" && cd "$BUILD_TMP" || return 1
         
         # 1. VapourSynth R79 (Pinned commit acabf60)
         if [ -d "vapoursynth" ]; then rm -rf vapoursynth; fi
-        clone_exact_commit "https://github.com/vapoursynth/vapoursynth.git" "acabf605b2205b32d65859bb2736405719d2fafd" "vapoursynth" || { log_error "Failed to clone VapourSynth"; cd ..; return 1; }
-        cd vapoursynth || { log_error "Failed to cd into vapoursynth"; cd ..; cd ..; return 1; }
-        meson setup build --prefix=/usr/local --buildtype=release || { log_error "VapourSynth meson setup failed"; cd ..; cd ..; return 1; }
-        ninja -C build -j "$(nproc)" || { log_error "VapourSynth ninja build failed"; cd ..; cd ..; return 1; }
-        ninja -C build install || { log_error "VapourSynth ninja install failed"; cd ..; cd ..; return 1; }
+        clone_exact_commit "https://github.com/vapoursynth/vapoursynth.git" "acabf605b2205b32d65859bb2736405719d2fafd" "vapoursynth" || { log_error "Failed to clone VapourSynth"; cd "$BUILD_TMP"; return 1; }
+        cd vapoursynth || { log_error "Failed to cd into vapoursynth"; cd "$BUILD_TMP"; return 1; }
+        meson setup build --prefix=/usr/local --buildtype=release || { log_error "VapourSynth meson setup failed"; cd "$BUILD_TMP"; return 1; }
+        ninja -C build -j "$(nproc)" || { log_error "VapourSynth ninja build failed"; cd "$BUILD_TMP"; return 1; }
+        ninja -C build install || { log_error "VapourSynth ninja install failed"; cd "$BUILD_TMP"; return 1; }
         ldconfig
-        cd ..
+        cd "$BUILD_TMP"
 
         # Deploy components from the R79 Meson Python install directory:
         local VS_PY_DIR
@@ -188,7 +188,6 @@ with open(path, "w") as f:
                 ln -sfn "$VS_PLUGIN_PATH" "$DIST_PKG_DIR/vapoursynth/plugins" 2>/dev/null || true
             fi
         fi
-        cd .. # Exit build_tmp
     else
         log_info "VapourSynth core is already installed."
     fi
@@ -209,16 +208,16 @@ with open(path, "w") as f:
     # 2. FFMS2 (Pinned to 5.0 commit 7ed5e4d)
     if [ ! -f "$VS_PLUGIN_PATH/libffms2.so" ] && [ ! -f "/usr/local/lib/libffms2.so" ]; then
         log_info "Compiling FFMS2..."
-        cd "$BASE_DIR/build_tmp" || exit 1
+        mkdir -p "$BUILD_TMP" && cd "$BUILD_TMP" || return 1
         if [ -d "ffms2" ]; then rm -rf ffms2; fi
-        clone_exact_commit "https://github.com/FFMS/ffms2.git" "7ed5e4d039ca9a6236bd2ebdfdd656c4304fbe04" "ffms2" || { log_error "Failed to clone FFMS2"; cd ..; return 1; }
-        cd ffms2 || { log_error "Failed to cd into ffms2"; cd ..; cd ..; return 1; }
-        ./autogen.sh || { log_error "FFMS2 autogen failed"; cd ..; cd ..; return 1; }
+        clone_exact_commit "https://github.com/FFMS/ffms2.git" "7ed5e4d039ca9a6236bd2ebdfdd656c4304fbe04" "ffms2" || { log_error "Failed to clone FFMS2"; cd "$BUILD_TMP"; return 1; }
+        cd ffms2 || { log_error "Failed to cd into ffms2"; cd "$BUILD_TMP"; return 1; }
+        ./autogen.sh || { log_error "FFMS2 autogen failed"; cd "$BUILD_TMP"; return 1; }
         export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH"
-        ./configure --enable-shared || { log_error "FFMS2 configure failed"; cd ..; cd ..; return 1; }
-        make -j "$(nproc)" || { log_error "FFMS2 make failed"; cd ..; cd ..; return 1; }
-        make install || { log_error "FFMS2 make install failed"; cd ..; cd ..; return 1; }
-        cd ..
+        ./configure --enable-shared || { log_error "FFMS2 configure failed"; cd "$BUILD_TMP"; return 1; }
+        make -j "$(nproc)" || { log_error "FFMS2 make failed"; cd "$BUILD_TMP"; return 1; }
+        make install || { log_error "FFMS2 make install failed"; cd "$BUILD_TMP"; return 1; }
+        cd "$BUILD_TMP"
     fi
 
     if [ -f "/usr/local/lib/libffms2.so" ]; then
@@ -232,9 +231,9 @@ with open(path, "w") as f:
         mkdir -p "$FDIR"
         cd "$FDIR" || return 1
         if [ ! -d "ffmpeg" ]; then
-            clone_exact_commit "https://github.com/FFmpeg/FFmpeg.git" "b6d737a49c3422ea81381851fa49ef750c9fd367" "ffmpeg" || { log_error "Failed to clone ffmpeg repo"; cd ..; return 1; }
+            clone_exact_commit "https://github.com/FFmpeg/FFmpeg.git" "b6d737a49c3422ea81381851fa49ef750c9fd367" "ffmpeg" || { log_error "Failed to clone ffmpeg repo"; return 1; }
         fi
-        cd ffmpeg || { log_error "Failed to cd into ffmpeg"; cd ..; cd ..; return 1; }
+        cd ffmpeg || { log_error "Failed to cd into ffmpeg"; return 1; }
         if [ ! -f "config.mak" ]; then
             ./configure \
               --prefix="/usr/local" \
@@ -246,19 +245,18 @@ with open(path, "w") as f:
               --enable-libass \
               --enable-libfreetype \
               --disable-doc \
-              --disable-programs || { log_error "FFmpeg configure failed"; cd ..; cd ..; return 1; }
+              --disable-programs || { log_error "FFmpeg configure failed"; return 1; }
         fi
-        make -j"$(nproc)" || { log_error "FFmpeg make failed"; cd ..; cd ..; return 1; }
-        make install || { log_error "FFmpeg make install failed"; cd ..; cd ..; return 1; }
+        make -j"$(nproc)" || { log_error "FFmpeg make failed"; return 1; }
+        make install || { log_error "FFmpeg make install failed"; return 1; }
         ldconfig
-        cd .. # FDIR
 
         # 4. BestSource
         log_info "Compiling BestSource..."
-        cd "$BASE_DIR/build_tmp" || return 1
+        mkdir -p "$BUILD_TMP" && cd "$BUILD_TMP" || return 1
         if [ -d "bestsource" ]; then rm -rf bestsource; fi
-        clone_exact_commit "https://github.com/vapoursynth/bestsource.git" "9faf6750b3ac3519cf18987f34d4212a7a06ddea" "bestsource" || { log_error "Failed to clone BestSource"; cd ..; return 1; }
-        cd bestsource || { log_error "Failed to cd into bestsource"; cd ..; cd ..; return 1; }
+        clone_exact_commit "https://github.com/vapoursynth/bestsource.git" "9faf6750b3ac3519cf18987f34d4212a7a06ddea" "bestsource" || { log_error "Failed to clone BestSource"; cd "$BUILD_TMP"; return 1; }
+        cd bestsource || { log_error "Failed to cd into bestsource"; cd "$BUILD_TMP"; return 1; }
         git submodule update --init --recursive || true
         
         # Patch BestSource for VapourSynth R79 (API 4.0/4.1) compatibility
@@ -281,12 +279,12 @@ with open(path, "w") as f:
 
         export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH"
         pip install meson --break-system-packages || true
-        meson setup build -Denable_gpu=disabled || { log_error "BestSource meson setup failed"; cd ..; cd ..; return 1; }
-        ninja -C build || { log_error "BestSource ninja build failed"; cd ..; cd ..; return 1; }
-        ninja -C build install || { log_error "BestSource ninja install failed"; cd ..; cd ..; return 1; }
+        meson setup build -Denable_gpu=disabled || { log_error "BestSource meson setup failed"; cd "$BUILD_TMP"; return 1; }
+        ninja -C build || { log_error "BestSource ninja build failed"; cd "$BUILD_TMP"; return 1; }
+        ninja -C build install || { log_error "BestSource ninja install failed"; cd "$BUILD_TMP"; return 1; }
         
         find /usr/local/lib -name "libbestsource.so*" -exec ln -sf {} "$VS_PLUGIN_PATH/libbestsource.so" \; 2>/dev/null || true
-        cd ..
+        cd "$BUILD_TMP"
     fi
 
     ldconfig

@@ -23,8 +23,6 @@ SVT_HDR_REF="df788d61dca67c7117af05e52a24f7ee9b1f8178"
 # build_svt_fork <repo> <ref> <name> <extra cmake args...>
 build_svt_fork() {
     local repo="$1" ref="$2" name="$3"; shift 3
-    local REPO_ROOT
-    REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     local FORK_DIR="$REPO_ROOT/tools/av1an/svt-av1 forks/$name/x86-64-v3"
 
     if [ -x "$FORK_DIR/SvtAv1EncApp" ] && ! ask_yes_no "Rebuild $name fork?" "N"; then
@@ -33,22 +31,22 @@ build_svt_fork() {
     fi
 
     log_info "Building SVT-AV1 fork: $name (Pinned: ${ref:0:7})..."
-    mkdir -p build_tmp
-    cd build_tmp || return 1
+    mkdir -p "$BUILD_TMP"
+    cd "$BUILD_TMP" || return 1
     local SRC="svt-$name"
     [ -d "$SRC" ] && rm -rf "$SRC"
-    clone_exact_commit "$repo" "$ref" "$SRC" || { log_error "Failed to clone $name"; cd ..; return 1; }
-    cd "$SRC" || { log_error "Failed to cd into $SRC"; cd ../..; return 1; }
+    clone_exact_commit "$repo" "$ref" "$SRC" || { log_error "Failed to clone $name"; cd "$REPO_ROOT"; return 1; }
+    cd "$SRC" || { log_error "Failed to cd into $SRC"; cd "$REPO_ROOT"; return 1; }
 
     sed -i 's/\r$//' Source/App/CMakeLists.txt 2>/dev/null
     sed -i 's/target_link_libraries(SvtAv1EncApp ${PLATFORM_LIBS})/target_link_libraries(SvtAv1EncApp PRIVATE ${PLATFORM_LIBS})/' Source/App/CMakeLists.txt 2>/dev/null
     sed -i 's/target_link_libraries(SvtAv1EncApp$/target_link_libraries(SvtAv1EncApp PRIVATE/' Source/App/CMakeLists.txt 2>/dev/null
 
-    mkdir -p Build/linux && cd Build/linux || { log_error "mkdir Build/linux failed"; cd ../../..; return 1; }
+    mkdir -p Build/linux && cd Build/linux || { log_error "mkdir Build/linux failed"; cd "$REPO_ROOT"; return 1; }
     cmake ../.. -G"Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ "$@" \
-        || { log_error "$name cmake failed"; cd ../../../..; return 1; }
-    make -j "$(nproc)" || { log_error "$name make failed"; cd ../../../..; return 1; }
+        || { log_error "$name cmake failed"; cd "$REPO_ROOT"; return 1; }
+    make -j "$(nproc)" || { log_error "$name make failed"; cd "$REPO_ROOT"; return 1; }
 
     mkdir -p "$FORK_DIR"
     local APP_BIN
@@ -63,12 +61,11 @@ build_svt_fork() {
     fi
 
     if [ -n "$APP_BIN" ] && [ -f "$APP_BIN" ]; then
-        cp -v "$APP_BIN" "$FORK_DIR/SvtAv1EncApp" || { log_error "copy failed"; cd ../../../..; return 1; }
+        cp -v "$APP_BIN" "$FORK_DIR/SvtAv1EncApp" || { log_error "copy failed"; cd "$REPO_ROOT"; return 1; }
     else
-        log_error "SvtAv1EncApp binary not found after build"; cd ../../../..; return 1
+        log_error "SvtAv1EncApp binary not found after build"; cd "$REPO_ROOT"; return 1
     fi
-    cd ../../.. # build_tmp/<src>
-    cd ..      # build_tmp
+    cd "$REPO_ROOT"
     log_info "$name fork installed to: $FORK_DIR"
     return 0
 }
@@ -91,8 +88,6 @@ install_svt_av1() {
         -DENABLE_AVX512=ON -DNATIVE=ON -DSVT_AV1_PGO=ON -DSVT_AV1_LTO=ON \
         || return 1
 
-    local REPO_ROOT
-    REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     cp -v "$REPO_ROOT/tools/av1an/svt-av1 forks/5fish-svt-av1-psy/x86-64-v3/SvtAv1EncApp" /usr/local/bin/SvtAv1EncApp
 
     # 2. essential fork
@@ -117,8 +112,6 @@ uninstall_svt_av1() {
     rm -vf /usr/local/lib/libSvtAv1Enc*
     rm -rf /usr/local/include/svt-av1
     rm -vf /usr/local/lib/pkgconfig/SvtAv1Enc.pc
-    local REPO_ROOT
-    REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     rm -rf "$REPO_ROOT/tools/av1an/svt-av1 forks"
     log_success "SVT-AV1-PSY uninstalled."
 }

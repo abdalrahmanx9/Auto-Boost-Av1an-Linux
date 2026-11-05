@@ -7,9 +7,23 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BASE_DIR="$REPO_ROOT"
+BUILD_TMP="$REPO_ROOT/build_tmp"
+
 export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:/usr/local/share/pkgconfig:${PKG_CONFIG_PATH}"
 export LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}"
 export VAPOURSYNTH_EXTRA_PLUGIN_PATH="/usr/local/lib/vapoursynth:${VAPOURSYNTH_EXTRA_PLUGIN_PATH}"
+
+load_cargo_env() {
+    [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env" 2>/dev/null || true
+    export PATH="$HOME/.cargo/bin:$PATH"
+}
+
+find_in_python_libs() {
+    local pattern="$1"
+    find /usr/local/lib*/python* /usr/lib*/python* -name "$pattern" 2>/dev/null | head -n 1
+}
 
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -72,6 +86,10 @@ clone_exact_commit() {
 ask_yes_no() {
     local prompt="$1"
     local default="$2" # Y or N
+    
+    if [ "$FORCE_YES" == "1" ]; then
+        return 0
+    fi
     
     # If non-interactive (e.g. piped or automated script), return default immediately
     if [ ! -t 0 ]; then

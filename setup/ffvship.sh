@@ -15,24 +15,13 @@ fi
 VSHIP_REPO="https://codeberg.org/Line-fr/Vship.git"
 VSHIP_COMMIT="d5302054d22c139633986a76a4dbfcddc857126c" # v5.1.0
 
-vs_plugin_dirs() {
-    pkg-config --variable=libdir vapoursynth 2>/dev/null | sed 's|$|/vapoursynth|'
-    echo "/usr/local/lib/vapoursynth"
-    echo "/usr/lib/x86_64-linux-gnu/vapoursynth"
-    echo "/usr/lib/vapoursynth"
-    echo "/usr/lib64/vapoursynth"
-}
-
 install_ffvship() {
-    local REPO_ROOT
-    REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
-    mkdir -p build_tmp
-    cd build_tmp || exit 1
+    mkdir -p "$BUILD_TMP"
+    cd "$BUILD_TMP" || return 1
 
     if [ -d "Vship" ]; then rm -rf Vship; fi
-    clone_exact_commit "$VSHIP_REPO" "$VSHIP_COMMIT" "Vship" || { log_error "Failed to clone Vship"; cd ..; return 1; }
-    cd Vship || { log_error "Failed to cd into Vship"; cd ..; cd ..; return 1; }
+    clone_exact_commit "$VSHIP_REPO" "$VSHIP_COMMIT" "Vship" || { log_error "Failed to clone Vship"; cd "$REPO_ROOT"; return 1; }
+    cd Vship || { log_error "Failed to cd into Vship"; cd "$REPO_ROOT"; return 1; }
 
     local BUILT_ANY=0
 
@@ -77,7 +66,7 @@ install_ffvship() {
         log_warn "Vulkan build failed (libvulkan-dev / glslang-tools installed?)."
     fi
 
-    [ "$BUILT_ANY" -eq 1 ] || { log_error "No Vship backend could be built."; cd ../..; return 1; }
+    [ "$BUILT_ANY" -eq 1 ] || { log_error "No Vship backend could be built."; cd "$REPO_ROOT"; return 1; }
 
     # FFVship CLI binary (metric streamer used as external ssimu2 backend)
     if [ ! -f "/usr/local/bin/FFVship" ]; then
@@ -105,7 +94,7 @@ install_ffvship() {
         log_info "Activated $BEST as libvship.so"
     fi
 
-    cd ../.. # Exit build_tmp
+    cd "$REPO_ROOT"
     log_success "Vship 5.1.0 installed (tools/vs-hip + tools/FFVship)."
 }
 
@@ -114,8 +103,6 @@ uninstall_ffvship() {
     rm -vf /usr/local/bin/FFVship
     uninstall_vs_plugin "libvship.so"
     uninstall_vs_plugin "libvship_*.so"
-    local REPO_ROOT
-    REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     rm -rf "$REPO_ROOT/tools/vs-hip" "$REPO_ROOT/tools/FFVship"
     ldconfig 2>/dev/null || true
     log_success "FFVship uninstalled."

@@ -173,6 +173,7 @@ install_tool() {
     fi
     
     for item in "${install_queue[@]}"; do
+        cd "$BASE_DIR" || exit 1
         log_info "Installing: $item"
         local status=0
         case "$item" in
@@ -200,6 +201,7 @@ install_tool() {
             *) log_error "Unknown module: $item"; exit 1 ;;
         esac
         status=$?
+        cd "$BASE_DIR" || exit 1
         if [ $status -ne 0 ]; then
             log_error "Failed to install $item (Exit code: $status). Stopping."
             return 1
@@ -219,6 +221,7 @@ uninstall_tool() {
         fi
     fi
     
+    cd "$BASE_DIR" || exit 1
     case "$target_tool" in
         "system_deps")
             if command -v pacman &> /dev/null; then
@@ -366,9 +369,6 @@ show_menu() {
 }
 
 # Main Execution Flow
-check_root
-check_distro
-
 if [ "$1" == "--status" ]; then
     echo "=========================================================="
     echo "   Auto-Boost-Av1an Setup Status"
@@ -390,7 +390,12 @@ if [ "$1" == "--status" ]; then
     printf "%-3s %-35s %s\n" "13" "Condor + LQTC layout" "$(get_status_icon tq_encoders)"
     echo "=========================================================="
     exit 0
-elif [ "$1" == "--install" ] && [ -n "$2" ]; then
+fi
+
+check_root
+check_distro
+
+if [ "$1" == "--install" ] && [ -n "$2" ]; then
     if [ "$3" == "-y" ] || [ "$3" == "--yes" ]; then
         export FORCE_YES=1
     fi

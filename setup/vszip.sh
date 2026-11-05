@@ -14,10 +14,7 @@ install_vszip() {
 
     # 2. Find and symlink the best suited libvszip.so
     local VSZIP_LIB
-    VSZIP_LIB="$(find /usr/local/lib/python3* -name "libvszip.so" 2>/dev/null | head -n 1)"
-    if [ -z "$VSZIP_LIB" ]; then
-        VSZIP_LIB="$(find /usr/lib/python3* -name "libvszip.so" 2>/dev/null | head -n 1)"
-    fi
+    VSZIP_LIB="$(find_in_python_libs "libvszip.so")"
 
     if [ -n "$VSZIP_LIB" ] && [ -f "$VSZIP_LIB" ]; then
         install_vs_plugin "$VSZIP_LIB"
@@ -25,13 +22,13 @@ install_vszip() {
         return 0
     fi
 
-    mkdir -p build_tmp
-    cd build_tmp || exit 1
+    mkdir -p "$BUILD_TMP"
+    cd "$BUILD_TMP" || return 1
     
     log_info "Fallback: Compiling VSZIP from source (Pinned: d11057c)..."
     if [ -d "vszip" ]; then rm -rf vszip; fi
-    clone_exact_commit "https://github.com/dnjulek/vapoursynth-zip.git" "d11057c95442e6ca76c10128a9ddac4db2973aa0" "vszip" || { log_error "Failed to clone VSZIP"; cd ..; return 1; }
-    cd vszip || { log_error "Failed to cd into vszip"; cd ..; cd ..; return 1; }
+    clone_exact_commit "https://github.com/dnjulek/vapoursynth-zip.git" "d11057c95442e6ca76c10128a9ddac4db2973aa0" "vszip" || { log_error "Failed to clone VSZIP"; cd "$REPO_ROOT"; return 1; }
+    cd vszip || { log_error "Failed to cd into vszip"; cd "$REPO_ROOT"; return 1; }
     
     if command -v zig &> /dev/null; then
         zig build -Doptimize=ReleaseFast
@@ -39,8 +36,7 @@ install_vszip() {
             install_vs_plugin "zig-out/lib/libvszip.so"
         fi
     fi
-    cd ..
-    cd .. # Exit build_tmp
+    cd "$REPO_ROOT"
     
     if find /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 -name "libvszip.so" 2>/dev/null | grep -q .; then
         log_success "VSZIP installed."

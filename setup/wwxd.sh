@@ -6,13 +6,13 @@ if [ -z "$COMMON_SOURCED" ]; then
 fi
 
 install_wwxd() {
-    mkdir -p build_tmp
-    cd build_tmp || exit 1
+    mkdir -p "$BUILD_TMP"
+    cd "$BUILD_TMP" || return 1
 
     log_info "Compiling VapourSynth-WWXD (API 4, Pinned: 73c05a4)..."
     if [ -d "vapoursynth-wwxd" ]; then rm -rf vapoursynth-wwxd; fi
-    clone_exact_commit "https://github.com/dubhater/vapoursynth-wwxd.git" "73c05a4e8202ba935e1eb5ecc0471eb632f973ab" "vapoursynth-wwxd" || { log_error "Failed to clone WWXD"; cd ..; return 1; }
-    cd vapoursynth-wwxd || { log_error "Failed to cd into vapoursynth-wwxd"; cd ..; cd ..; return 1; }
+    clone_exact_commit "https://github.com/dubhater/vapoursynth-wwxd.git" "73c05a4e8202ba935e1eb5ecc0471eb632f973ab" "vapoursynth-wwxd" || { log_error "Failed to clone WWXD"; cd "$REPO_ROOT"; return 1; }
+    cd vapoursynth-wwxd || { log_error "Failed to cd into vapoursynth-wwxd"; cd "$REPO_ROOT"; return 1; }
     
     # Ensure headers and links are configured
     setup_vs_links
@@ -22,7 +22,7 @@ install_wwxd() {
     VS_INCLUDE="$(get_vs_include_dir)"
     if [ ! -d "$VS_INCLUDE" ] || ([ ! -f "$VS_INCLUDE/VapourSynth4.h" ] && [ ! -f "$VS_INCLUDE/VapourSynth.h" ]); then
         log_error "VapourSynth headers not found at $VS_INCLUDE. Please install VapourSynth first."
-        cd ..; cd ..; return 1
+        cd "$REPO_ROOT"; return 1
     fi
 
     # Fix VSHelper4.h include for API 4
@@ -174,11 +174,10 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI
 EOF
     
     gcc -o libwwxd.so -fPIC -shared -O3 -Wall -Wextra -I. -I"$VS_INCLUDE" src/*.c -lm || \
-        { log_error "Compilation failed"; cd ..; cd ..; return 1; }
+        { log_error "Compilation failed"; cd "$REPO_ROOT"; return 1; }
     
     install_vs_plugin libwwxd.so
-    cd ..
-    cd .. # Exit build_tmp
+    cd "$REPO_ROOT"
     
     log_success "WWXD installed."
 }

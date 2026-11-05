@@ -15,8 +15,6 @@ fi
 #   tools/LQTC/display.json                 -> CVVDP viewing conditions file
 #   video-output/grav1synth                 -> film-grain table generator (LQTC)
 install_tq_encoders() {
-    local REPO_ROOT
-    REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     local CONDOR_DIR="$REPO_ROOT/tools/av1an"
     local LQTC_DIR="$REPO_ROOT/tools/LQTC"
 
@@ -53,8 +51,6 @@ install_tq_encoders() {
 }
 
 uninstall_tq_encoders() {
-    local REPO_ROOT
-    REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     rm -rf "$REPO_ROOT/tools/LQTC"
     rm -vf "$REPO_ROOT/tools/av1an/condor"
     log_success "TQ encoders removed."

@@ -45,7 +45,7 @@ install_vs_filters() {
 
     # akarin (expr) - check python package wheel first, then build fallback
     local AKARIN_SO
-    AKARIN_SO="$(find /usr/local/lib/python* /usr/lib/python* /usr/lib64/python* /usr/local/lib64/python* -name "libakarin.so" 2>/dev/null | head -n 1)"
+    AKARIN_SO="$(find_in_python_libs "libakarin.so")"
     if [ -n "$AKARIN_SO" ]; then
         vsf_install_so "$AKARIN_SO"
         local AKARIN_DIR="$(dirname "$AKARIN_SO")"
@@ -56,7 +56,7 @@ install_vs_filters() {
         fi
         log_info "akarin installed from wheel ($AKARIN_SO)."
     else
-        mkdir -p build_tmp && cd build_tmp || return 1
+        mkdir -p "$BUILD_TMP" && cd "$BUILD_TMP" || return 1
         [ -d "akarin" ] && rm -rf "akarin"
         if clone_exact_commit "https://github.com/AkarinVS/vapoursynth-plugin.git" "8b7ff6dcc85bc9935789c799e63f1388dfbd1bd4" "akarin"; then
             cd akarin
@@ -66,13 +66,13 @@ install_vs_filters() {
             else
                 log_warn "akarin build failed (requires LLVM < 16). Try pip install vapoursynth-akarin."
             fi
-            cd ..
+            cd "$BUILD_TMP"
         fi
-        cd ..
+        cd "$REPO_ROOT"
     fi
 
     # AWarp (Pinned tag 3.1: 86d1d40) - meson
-    mkdir -p build_tmp && cd build_tmp || return 1
+    mkdir -p "$BUILD_TMP" && cd "$BUILD_TMP" || return 1
     [ -d "VapourSynth-AWarp" ] && rm -rf "VapourSynth-AWarp"
     if clone_exact_commit "https://github.com/HolyWu/VapourSynth-AWarp.git" "86d1d4067b823f72511760499006df6c93015f44" "VapourSynth-AWarp"; then
         cd VapourSynth-AWarp
@@ -84,12 +84,12 @@ install_vs_filters() {
         else
             log_warn "AWarp build failed."
         fi
-        cd ..
+        cd "$BUILD_TMP"
     fi
-    cd ..
+    cd "$REPO_ROOT"
 
     # DFTTest (API 4 build)
-    mkdir -p build_tmp && cd build_tmp || return 1
+    mkdir -p "$BUILD_TMP" && cd "$BUILD_TMP" || return 1
     local DFT_URL="https://github.com/RyougiKukoc/VapourSynth-DFTTest-api4/releases/download/v1.1/dfttest-linux-x86_64.zip"
     if curl -sL -o dfttest-linux-x86_64.zip "$DFT_URL"; then
         if unzip -o dfttest-linux-x86_64.zip; then
@@ -101,20 +101,20 @@ install_vs_filters() {
     else
         log_warn "DFTTest download failed."
     fi
-    cd ..
+    cd "$REPO_ROOT"
 
     # zsmooth (Pinned commit 187ae30) - check wheel first, then Zig build
     local ZSMOOTH_SO
-    ZSMOOTH_SO="$(find /usr/local/lib/python* /usr/lib/python* -name "libzsmooth.so" 2>/dev/null | head -n 1)"
+    ZSMOOTH_SO="$(find_in_python_libs "libzsmooth.so")"
     if [ -n "$ZSMOOTH_SO" ]; then
         vsf_install_so "$ZSMOOTH_SO"
         log_info "zsmooth installed from wheel ($ZSMOOTH_SO)."
     else
-        mkdir -p build_tmp && cd build_tmp || return 1
+        mkdir -p "$BUILD_TMP" && cd "$BUILD_TMP" || return 1
         if [ -d "zsmooth" ]; then rm -rf zsmooth; fi
-        clone_exact_commit "https://github.com/adworacz/zsmooth.git" "187ae3011979b8064baf46034a2771b7f018a1c6" "zsmooth" || { log_warn "clone failed: zsmooth"; cd ..; }
+        clone_exact_commit "https://github.com/adworacz/zsmooth.git" "187ae3011979b8064baf46034a2771b7f018a1c6" "zsmooth" || { log_warn "clone failed: zsmooth"; cd "$REPO_ROOT"; }
         if [ -d "zsmooth" ]; then
-            cd zsmooth || { cd ..; }
+            cd zsmooth || { cd "$REPO_ROOT"; }
             if [ -d "build-help" ]; then
                 cd build-help && chmod +x build.sh && ./build.sh
                 for so in $(find .. -name "libzsmooth.so" -type f); do
@@ -130,17 +130,17 @@ install_vs_filters() {
             else
                 log_warn "zsmooth: no build-help/build.sh and no zig installed."
             fi
-            cd ..
+            cd "$BUILD_TMP"
         fi
-        cd .. # exit build_tmp
+        cd "$REPO_ROOT"
     fi
 
     # vs-placebo (Pinned tag 2.0.4: 3cfd23f) - meson, needs libplacebo-dev
-    mkdir -p build_tmp && cd build_tmp || return 1
+    mkdir -p "$BUILD_TMP" && cd "$BUILD_TMP" || return 1
     if [ -d "vs-placebo" ]; then rm -rf vs-placebo; fi
     clone_exact_commit "https://github.com/Lypheo/vs-placebo.git" "3cfd23f257ecb62b0cbd81eaaca092e18ae8e579" "vs-placebo" || log_warn "clone failed: vs-placebo"
     if [ -d "vs-placebo" ]; then
-        cd vs-placebo || { cd ..; }
+        cd vs-placebo || { cd "$REPO_ROOT"; }
         export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH"
         if meson setup build && ninja -C build; then
             local SO
@@ -153,9 +153,9 @@ install_vs_filters() {
         else
             log_warn "vs-placebo build failed (libplacebo-dev installed?)."
         fi
-        cd ..
+        cd "$BUILD_TMP"
     fi
-    cd .. # exit build_tmp
+    cd "$REPO_ROOT"
 
     log_success "Filter plugin pass complete (failures above are non-fatal per plugin)."
 }

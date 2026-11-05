@@ -15,12 +15,11 @@ install_oxipng() {
             fi
         fi
         log_info "Installing oxipng..."
-        [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+        load_cargo_env
         if ! command -v cargo &> /dev/null; then
             log_info "Installing Rust for oxipng..."
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y || { log_error "Failed to install Rust via rustup"; return 1; }
-            source "$HOME/.cargo/env"
-            export PATH="$HOME/.cargo/bin:$PATH"
+            load_cargo_env
         fi
         cargo install --version 10.2.1 --locked oxipng || { log_error "Failed to install oxipng via cargo"; return 1; }
         
@@ -37,7 +36,7 @@ install_oxipng() {
 uninstall_oxipng() {
     log_info "Uninstalling oxipng..."
     rm -vf /usr/local/bin/oxipng
-    source "$HOME/.cargo/env"
+    load_cargo_env
     cargo uninstall oxipng 2>/dev/null || true
     log_success "oxipng uninstalled."
 }

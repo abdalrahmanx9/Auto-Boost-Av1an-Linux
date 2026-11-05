@@ -10,18 +10,7 @@ fi
 # running ArtCNN models. Optional: only needed for AI rescaling.
 MLRT_API4_REPO_API="https://api.github.com/repos/RyougiKukoc/vs-mlrt-api4/releases"
 
-vsmlrt_plugin_dirs() {
-    pkg-config --variable=libdir vapoursynth 2>/dev/null | sed 's|$|/vapoursynth|'
-    echo "/usr/local/lib/vapoursynth"
-    echo "/usr/lib/x86_64-linux-gnu/vapoursynth"
-    echo "/usr/lib/vapoursynth"
-    echo "/usr/lib64/vapoursynth"
-}
-
 install_mlrt() {
-    local REPO_ROOT
-    REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
     if ! command -v curl &> /dev/null && ! command -v wget &> /dev/null; then
         log_error "Need curl or wget to download vs-mlrt."
         return 1
@@ -47,11 +36,11 @@ install_mlrt() {
         return 1
     fi
 
-    mkdir -p build_tmp/mlrt && cd build_tmp/mlrt || return 1
+    mkdir -p "$BUILD_TMP/mlrt" && cd "$BUILD_TMP/mlrt" || return 1
     local FNAME="${URL##*/}"
     log_info "Downloading $FNAME..."
-    curl -sL -o "$FNAME" "$URL" || { log_warn "download failed: $FNAME"; cd ../..; return 1; }
-    unzip -o "$FNAME" || { log_warn "failed to extract $FNAME"; cd ../..; return 1; }
+    curl -sL -o "$FNAME" "$URL" || { log_warn "download failed: $FNAME"; cd "$REPO_ROOT"; return 1; }
+    unzip -o "$FNAME" || { log_warn "failed to extract $FNAME"; cd "$REPO_ROOT"; return 1; }
 
     # If support libraries exist, move them to /usr/local/lib so vs plugin loader doesn't choke on them
     if [ -d "vsmlrt" ]; then
@@ -67,7 +56,7 @@ install_mlrt() {
 
     # ArtCNN models go through vsscale's own downloader at first use; keep a cache dir
     mkdir -p "$REPO_ROOT/.vsjet"
-    cd ../..
+    cd "$REPO_ROOT"
     log_success "vs-mlrt installed (AI rescale backends)."
 }
 
