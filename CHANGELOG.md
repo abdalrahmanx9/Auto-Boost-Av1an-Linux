@@ -23,6 +23,9 @@ Fedora and Nobara Linux support, multilib 64-bit path resolution, and CachyOS he
   - Enhanced `vapoursynth.toml` generator with integer timestamps and all 64-bit library search paths so `vspipe` operates natively without `Failed to initialize VSScript` errors.
   - Patched BestSource API 4 compilation for Fedora/Nobara builds.
 
+### Removed
+- **Legacy Wrapper Scripts**: Removed deprecated `install_deps_ubuntu.sh` and `cleanup_install.sh` shims; full installation and uninstallation are handled uniformly across all distributions by `setup.sh`.
+
 ## [3.0.2-linux] - 2026-11-03
 
 Arch Linux and CachyOS VapourSynth R81+ compatibility fixes and plugin installer hardening.
