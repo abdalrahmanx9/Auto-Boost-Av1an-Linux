@@ -42,7 +42,7 @@ install_vszip() {
     cd ..
     cd .. # Exit build_tmp
     
-    if find /usr/lib /usr/local/lib -name "libvszip.so" 2>/dev/null | grep -q .; then
+    if find /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 -name "libvszip.so" 2>/dev/null | grep -q .; then
         log_success "VSZIP installed."
     else
         log_error "VSZIP installation failed."

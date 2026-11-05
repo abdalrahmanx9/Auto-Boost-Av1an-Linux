@@ -14,16 +14,20 @@ install_vapoursynth() {
     configure_vs_toml() {
         python3 -c '
 import os, pathlib, glob, sys, sysconfig
+
 paths = [
     "/usr/lib/python3/dist-packages/vapoursynth/libvsscript.so",
     "/usr/local/lib/python3/dist-packages/vapoursynth/libvsscript.so",
     "/usr/local/lib/libvsscript.so",
     "/usr/lib/libvsscript.so",
+    "/usr/lib64/libvsscript.so",
 ]
-for p in glob.glob("/usr/local/lib/python3*/dist-packages/vapoursynth/libvsscript.so") + \
-         glob.glob("/usr/lib/python3*/dist-packages/vapoursynth/libvsscript.so") + \
-         glob.glob("/usr/lib/python3*/site-packages/vapoursynth/libvsscript.so") + \
-         glob.glob("/usr/local/lib/python3*/site-packages/vapoursynth/libvsscript.so"):
+for p in (glob.glob("/usr/local/lib/python3*/dist-packages/vapoursynth/libvsscript.so*") +
+          glob.glob("/usr/lib/python3*/dist-packages/vapoursynth/libvsscript.so*") +
+          glob.glob("/usr/lib/python3*/site-packages/vapoursynth/libvsscript.so*") +
+          glob.glob("/usr/lib64/python3*/site-packages/vapoursynth/libvsscript.so*") +
+          glob.glob("/usr/local/lib/python3*/site-packages/vapoursynth/libvsscript.so*") +
+          glob.glob("/usr/lib*/libvsscript.so*")):
     paths.append(p)
 
 lib_dir = sysconfig.get_config_var("LIBDIR") or "/usr/lib"
@@ -34,8 +38,13 @@ if not os.path.exists(py_lib):
     if candidates:
         py_lib = candidates[0]
 
-val = [sys.executable, py_lib, "1788171506"]
-lines = [f"\"{p}\" = [\"{val[0]}\", \"{val[1]}\", \"{val[2]}\"]\n" for p in set(paths) if os.path.exists(p)]
+py_bin = sys.executable
+try:
+    py_mtime = int(os.stat(py_bin).st_mtime)
+except Exception:
+    py_mtime = 1788171506
+
+lines = [f"\"{p}\" = [\"{py_bin}\", \"{py_lib}\", {py_mtime}]\n" for p in set(paths) if os.path.exists(p)]
 content = "".join(lines)
 for target in [pathlib.Path.home() / ".config/vapoursynth/vapoursynth.toml", pathlib.Path("/etc/vapoursynth.toml"), pathlib.Path("/root/.config/vapoursynth/vapoursynth.toml")]:
     try:
@@ -67,6 +76,66 @@ for target in [pathlib.Path.home() / ".config/vapoursynth/vapoursynth.toml", pat
         configure_vs_toml
         ldconfig 2>/dev/null || true
         log_success "VapourSynth, FFMS2, and BestSource installed from official repositories."
+        return 0
+    fi
+
+    # On Fedora/Nobara, VapourSynth + FFMS2 exist in official/RPM Fusion repos
+    if command -v dnf &> /dev/null || command -v dnf5 &> /dev/null; then
+        local DNF="dnf"
+        command -v dnf5 &> /dev/null && DNF="dnf5"
+        if ! command -v vspipe &> /dev/null || ! python3 -c "import vapoursynth" &>/dev/null; then
+            log_info "Installing VapourSynth & FFMS2 via $DNF..."
+            $DNF install -y --allowerasing vapoursynth python3-vapoursynth vapoursynth-devel vapoursynth-tools vapoursynth-libs ffms2 ffms2-devel || {
+                log_error "Failed to install VapourSynth packages via $DNF."
+                return 1
+            }
+        else
+            log_info "VapourSynth core is already installed."
+        fi
+
+        setup_vs_links
+        configure_vs_toml
+        ldconfig 2>/dev/null || true
+
+        # Check if BestSource is installed; if not, build it
+        if ! python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'bs') or hasattr(vs.core, 'bestsource')" &>/dev/null && \
+           ! find /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 -name "libbestsource.so*" 2>/dev/null | grep -q .; then
+            log_info "Compiling BestSource for Fedora/Nobara..."
+            cd "$BASE_DIR/build_tmp" || mkdir -p "$BASE_DIR/build_tmp" && cd "$BASE_DIR/build_tmp"
+            if [ -d "bestsource" ]; then rm -rf bestsource; fi
+            clone_exact_commit "https://github.com/vapoursynth/bestsource.git" "9faf6750b3ac3519cf18987f34d4212a7a06ddea" "bestsource" || { log_error "Failed to clone BestSource"; return 1; }
+            cd bestsource || return 1
+            git submodule update --init --recursive || true
+
+            # Patch BestSource for VapourSynth API 4.0/4.1 compatibility
+            python3 -c '
+path = "src/vapoursynth.cpp"
+with open(path, "r") as f:
+    c = f.read()
+c = c.replace("clip:vnode:all;", "clip:vnode;")
+target = """        if (D->GpuExport)
+            Node = vsapi->createVideoFilterEx2(\"VideoSource\", &D->VI, BestVideoSourceGetFrame, BestVideoSourceFree, fmUnordered,
+                ffGPUOutput, nullptr, 0, D, Core);
+        else
+            Node = vsapi->createVideoFilter2(\"VideoSource\", &D->VI, BestVideoSourceGetFrame, BestVideoSourceFree, fmUnordered, nullptr, 0, D, Core);"""
+replacement = """        Node = vsapi->createVideoFilter2(\"VideoSource\", &D->VI, BestVideoSourceGetFrame, BestVideoSourceFree, fmUnordered, nullptr, 0, D, Core);"""
+if target in c:
+    c = c.replace(target, replacement)
+with open(path, "w") as f:
+    f.write(c)
+' 2>/dev/null || true
+
+            meson setup build -Denable_gpu=disabled || { log_error "BestSource meson setup failed"; cd ..; return 1; }
+            ninja -C build || { log_error "BestSource ninja build failed"; cd ..; return 1; }
+            ninja -C build install || { log_error "BestSource ninja install failed"; cd ..; return 1; }
+            if [ -f "build/libbestsource.so" ]; then
+                install_vs_plugin "build/libbestsource.so"
+            fi
+            setup_vs_links
+            cd ..
+        fi
+
+        log_success "VapourSynth, FFMS2, and BestSource configured for Fedora/Nobara."
         return 0
     fi
 

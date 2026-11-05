@@ -13,6 +13,7 @@ source "$SETUP_DIR/common.sh"
 COMMON_SOURCED=true
 source "$SETUP_DIR/system_deps.sh"
 source "$SETUP_DIR/cachyos_deps.sh"
+source "$SETUP_DIR/fedora_deps.sh"
 source "$SETUP_DIR/python_libs.sh"
 source "$SETUP_DIR/vapoursynth.sh"
 source "$SETUP_DIR/av1an.sh"
@@ -50,6 +51,8 @@ is_installed() {
         "system_deps") 
             if command -v pacman &> /dev/null; then
                 pacman -Qi clang &> /dev/null
+            elif command -v dnf &> /dev/null || command -v dnf5 &> /dev/null; then
+                rpm -q clang &> /dev/null
             else
                 dpkg -s build-essential &> /dev/null
             fi
@@ -59,9 +62,9 @@ is_installed() {
             ;;
         "vapoursynth")
             command -v vspipe &> /dev/null && \
-            ((find /usr/lib /usr/local/lib -name "libffms2.so*" 2>/dev/null | grep -q .) || \
+            ((find /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 -name "libffms2.so*" 2>/dev/null | grep -q .) || \
              python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'ffms2')" &>/dev/null) && \
-            ((find /usr/lib /usr/local/lib -name "libbestsource.so*" 2>/dev/null | grep -q .) || \
+            ((find /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 -name "libbestsource.so*" 2>/dev/null | grep -q .) || \
              python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'bs') or hasattr(vs.core, 'bestsource')" &>/dev/null)
             ;;
         "av1an")
@@ -77,23 +80,23 @@ is_installed() {
             command -v oxipng &> /dev/null
             ;;
         "wwxd")
-            (find /usr/lib /usr/local/lib -name "libwwxd.so" 2>/dev/null | grep -q .) || \
+            (find /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 -name "libwwxd.so" 2>/dev/null | grep -q .) || \
             python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'wwxd')" &>/dev/null
             ;;
         "vszip")
-            (find /usr/lib /usr/local/lib -name "libvszip.so" 2>/dev/null | grep -q .) || \
+            (find /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 -name "libvszip.so" 2>/dev/null | grep -q .) || \
             python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'vszip')" &>/dev/null
             ;;
         "subtext")
-            (find /usr/lib /usr/local/lib -name "libsubtext.so" 2>/dev/null | grep -q .) || \
+            (find /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 -name "libsubtext.so" 2>/dev/null | grep -q .) || \
             python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'subtext')" &>/dev/null
             ;;
         "vs_filters")
-            (find /usr/lib /usr/local/lib -name "libakarin.so" 2>/dev/null | grep -q .) || \
+            (find /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 -name "libakarin.so" 2>/dev/null | grep -q .) || \
             python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'akarin')" &>/dev/null
             ;;
         "mlrt")
-            (find /usr/lib /usr/local/lib -name "libvstrt.so" -o -name "libvsort.so" -o -name "vsncnn.so" -o -name "vsov.so" 2>/dev/null | grep -q .) || \
+            (find /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 -name "libvstrt.so" -o -name "libvsort.so" -o -name "vsncnn.so" -o -name "vsov.so" 2>/dev/null | grep -q .) || \
             python3 -c "import vapoursynth as vs; assert hasattr(vs.core, 'trt') or hasattr(vs.core, 'ncnn') or hasattr(vs.core, 'ov')" &>/dev/null
             ;;
         "tq_encoders")
@@ -176,6 +179,8 @@ install_tool() {
             "system_deps")
                 if command -v pacman &> /dev/null; then
                     install_cachyos_deps
+                elif command -v dnf &> /dev/null || command -v dnf5 &> /dev/null; then
+                    install_fedora_deps
                 else
                     install_system_deps
                 fi
@@ -218,6 +223,8 @@ uninstall_tool() {
         "system_deps")
             if command -v pacman &> /dev/null; then
                 uninstall_cachyos_deps
+            elif command -v dnf &> /dev/null || command -v dnf5 &> /dev/null; then
+                uninstall_fedora_deps
             else
                 uninstall_system_deps
             fi

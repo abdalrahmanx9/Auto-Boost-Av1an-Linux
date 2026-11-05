@@ -18,8 +18,12 @@ install_python_libs() {
         # Install vsjetpack and tooling via pip without touching distro-managed VapourSynth
         pip3 install --break-system-packages --no-deps "vsjetpack==2.2.2" vstools jetpytools \
             anitopy wakepy Cython matplotlib || { log_error "Failed to install Python libraries"; return 1; }
+    elif command -v dnf &> /dev/null || command -v dnf5 &> /dev/null; then
+        # On Fedora/Nobara, python3-vapoursynth is managed by RPM (dnf)
+        pip3 install --break-system-packages --no-deps "vsjetpack==2.2.2" vstools jetpytools \
+            anitopy wakepy Cython matplotlib || { log_error "Failed to install Python libraries"; return 1; }
     else
-        # Debian / Ubuntu / Fedora:
+        # Debian / Ubuntu:
         # Use --ignore-installed to avoid conflicts with apt-installed packages
         # Added dependencies for tools/comp.py (anitopy, pyperclip, requests, natsort, colorama)
         # vsjetpack is pinned to 2.2.2 (the version bundled with VapourSynth R79 on Windows)

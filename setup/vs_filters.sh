@@ -45,7 +45,7 @@ install_vs_filters() {
 
     # akarin (expr) - check python package wheel first, then build fallback
     local AKARIN_SO
-    AKARIN_SO="$(find /usr/local/lib/python* /usr/lib/python* -name "libakarin.so" 2>/dev/null | head -n 1)"
+    AKARIN_SO="$(find /usr/local/lib/python* /usr/lib/python* /usr/lib64/python* /usr/local/lib64/python* -name "libakarin.so" 2>/dev/null | head -n 1)"
     if [ -n "$AKARIN_SO" ]; then
         vsf_install_so "$AKARIN_SO"
         local AKARIN_DIR="$(dirname "$AKARIN_SO")"

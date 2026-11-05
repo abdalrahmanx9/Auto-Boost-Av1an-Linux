@@ -2,6 +2,27 @@
 
 All notable changes to the Linux Port of Auto-Boost-Av1an will be documented in this file.
 
+## [3.0.3-linux] - 2026-11-05
+
+Fedora and Nobara Linux support, multilib 64-bit path resolution, and CachyOS header/autoload hardening.
+
+### Added
+- **Fedora & Nobara Native Support**:
+  - Added `setup/fedora_deps.sh` supporting Fedora Workstation, Nobara Linux, RHEL, and Rocky Linux via `dnf` / `dnf5`.
+  - Automatic RPM Fusion (Free & Non-Free) repository configuration for full FFmpeg codec libraries (`ffmpeg`, `ffmpeg-devel`, `libdav1d-devel`).
+  - Native package installation for VapourSynth (`python3-vapoursynth`, `vapoursynth-devel`, `vapoursynth-tools`, `vapoursynth-libs`) and FFMS2 (`ffms2`, `ffms2-devel`).
+  - Added distro detection in `setup/common.sh` (`check_distro`) and system deps dispatch in `setup.sh`.
+
+### Fixed
+- **CachyOS / Arch Header & Plugin Hardening**:
+  - Ensured `VSHelper4.h -> VSHelper.h`, `VapourSynth4.h -> VapourSynth.h`, `VSConstants4.h -> VSConstants.h`, and `VSScript4.h -> VSScript.h` symlinks are created in all candidate include directories (`/usr/include/vapoursynth`, `/usr/local/include/vapoursynth`, and `$VS_PY_DIR/include`), eliminating the `fatal error: VSHelper.h: No such file or directory` error.
+  - Linked `$VS_PY_DIR/include` to system include directories so build systems checking `vapoursynth.get_include()` (such as BestSource) locate headers properly.
+  - Resolved `dubious ownership` git issues when building in containers or across user boundaries.
+- **Multilib 64-bit Architecture Paths (`/usr/lib64/`)**:
+  - Added `/usr/lib64/vapoursynth` and `/usr/local/lib64/vapoursynth` support across `setup/common.sh`, `setup/vapoursynth.sh`, `setup/mlrt.sh`, `setup/ffvship.sh`, and `setup.sh`.
+  - Enhanced `vapoursynth.toml` generator with integer timestamps and all 64-bit library search paths so `vspipe` operates natively without `Failed to initialize VSScript` errors.
+  - Patched BestSource API 4 compilation for Fedora/Nobara builds.
+
 ## [3.0.2-linux] - 2026-11-03
 
 Arch Linux and CachyOS VapourSynth R81+ compatibility fixes and plugin installer hardening.

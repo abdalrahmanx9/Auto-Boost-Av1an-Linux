@@ -15,6 +15,7 @@ vsmlrt_plugin_dirs() {
     echo "/usr/local/lib/vapoursynth"
     echo "/usr/lib/x86_64-linux-gnu/vapoursynth"
     echo "/usr/lib/vapoursynth"
+    echo "/usr/lib64/vapoursynth"
 }
 
 install_mlrt() {
